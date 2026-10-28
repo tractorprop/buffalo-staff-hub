@@ -43,6 +43,12 @@ async function loadAll() {
   }
 }
 
+const diggers = [
+  { src: '/machines/b1800.png', alt: 'B1800', h: 'h-28 sm:h-44' },
+  { src: '/machines/b1000.png', alt: 'B1000', h: 'h-24 sm:h-36' },
+  { src: '/machines/b600.png', alt: 'B600', h: 'h-20 sm:h-28' },
+]
+
 export function DashboardPage() {
   const { profile } = useAuth()
   const profiles = useProfiles()
@@ -83,15 +89,26 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold">
-          {greeting}
-          {profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-        </p>
-      </div>
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-white to-brand-50 dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="p-5 sm:self-center sm:p-6">
+            <h1 className="text-2xl font-bold sm:text-3xl">
+              {greeting}
+              {profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+          {/* Our diggers, largest to smallest (left to right) */}
+          <div className="flex items-end justify-center gap-1 px-4 sm:ml-auto sm:gap-3 sm:pr-8">
+            {diggers.map((m) => (
+              <img key={m.alt} src={m.src} alt={m.alt} className={`${m.h} w-auto object-contain drop-shadow-md`} />
+            ))}
+          </div>
+        </div>
+        <div className="h-1.5 bg-brand-500" />
+      </section>
 
       {d.toCall.length > 0 && (
         <Card title="📞 Customers to call: back in stock" tone="alert">
