@@ -1,0 +1,98 @@
+export type Role = 'staff' | 'manager'
+
+export interface Profile {
+  id: string
+  full_name: string | null
+  email: string | null
+  role: Role
+}
+
+export interface Model {
+  id: string
+  model_number: string
+  name: string | null
+  sizes: string[]
+  notes: string | null
+  created_at: string
+}
+
+export type MachineStatus = 'in_stock' | 'en_route' | 'sold'
+
+export interface Machine {
+  id: string
+  model_id: string
+  size: string | null
+  serial_number: string | null
+  status: MachineStatus
+  container_ref: string | null
+  eta: string | null
+  location: string | null
+  sold_date: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WaitlistEntry {
+  id: string
+  customer_name: string
+  phone: string | null
+  email: string | null
+  model_id: string
+  size_wanted: string | null
+  notes: string | null
+  contacted: boolean
+  contacted_by: string | null
+  contacted_at: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export type Priority = 'Low' | 'Normal' | 'High'
+
+export interface Task {
+  id: string
+  title: string
+  assignee_id: string | null
+  due_date: string | null
+  priority: Priority
+  done: boolean
+  related_model: string | null
+  created_at: string
+}
+
+export type HolidayType = 'Annual leave' | 'Sick' | 'Unpaid' | 'Other'
+export type HolidayStatus = 'pending' | 'approved' | 'declined'
+
+export interface Holiday {
+  id: string
+  staff_id: string
+  start_date: string
+  end_date: string
+  type: HolidayType
+  note: string | null
+  status: HolidayStatus
+  created_at: string
+}
+
+export interface AuditEntry {
+  id: number
+  table_name: string
+  record_id: string | null
+  action: 'INSERT' | 'UPDATE' | 'DELETE'
+  changed_by: string | null
+  old_data: Record<string, unknown> | null
+  new_data: Record<string, unknown> | null
+  changed_at: string
+}
+
+export interface ModelStockSummary {
+  model_id: string
+  model_number: string
+  name: string | null
+  sizes: string[]
+  in_stock: number
+  en_route: number
+  sold: number
+  waiting: number
+}
