@@ -3,6 +3,21 @@ import { supabase, friendlyError } from '../../lib/supabase'
 import type { Model } from '../../lib/types'
 import { Button, ErrorText, Field, Modal, inputClass } from '../../components/ui'
 
+const fitNumbers = (ids: string[], models: Model[]) =>
+  ids.map((id) => models.find((m) => m.id === id)?.model_number).filter((n): n is string => !!n)
+
+// "Thumb" + [B600] -> "Thumb B600"
+function fullName(base: string, ids: string[], models: Model[]) {
+  const add = fitNumbers(ids, models).filter((n) => !base.toLowerCase().includes(n.toLowerCase()))
+  return add.length ? `${base} ${add.join('/')}` : base
+}
+
+// "Thumb B600" + [B600] -> "Thumb"
+function baseName(full: string, ids: string[], models: Model[]) {
+  const suffix = ` ${fitNumbers(ids, models).join('/')}`
+  return ids.length && full.toLowerCase().endsWith(suffix.toLowerCase()) ? full.slice(0, -suffix.length) : full
+}
+
 export function ModelForm({
   model,
   models,
@@ -21,7 +36,9 @@ export function ModelForm({
     () => models.filter((m) => m.kind !== 'accessory' && m.id !== model?.id),
     [models, model],
   )
-  const [modelNumber, setModelNumber] = useState(model?.model_number ?? '')
+  // For accessories the user types just the part ("Thumb"); the machine it fits is added when saving.
+  const [modelNumber, setModelNumber] = useState(() => (model ? baseName(model.model_number, model.fits_models ?? [], models) : ''))
+  const [shared, setShared] = useState((model?.fits_models?.length ?? 0) > 1)
   const [name, setName] = useState(model?.name ?? '')
   const [sizes, setSizes] = useState((model?.sizes ?? []).join(', '))
   const [notes, setNotes] = useState(model?.notes ?? '')
@@ -32,6 +49,7 @@ export function ModelForm({
   async function save(e: FormEvent) {
     e.preventDefault()
     if (!supabase) return
+    if (kind === 'accessory' && fits.length === 0) return setError('Tick the machine this accessory fits.')
     setBusy(true)
     setError('')
     const sizeList = [...new Set(sizes.split(',').map((s) => s.trim()).filter(Boolean))]
@@ -48,15 +66,23 @@ export function ModelForm({
     }
     // Only send the low-stock level once the database has that column (or one was typed).
     if (reorder !== '' || model?.reorder_level !== undefined) row.reorder_level = reorder === '' ? null : Math.max(0, parseInt(reorder) || 0)
+    // Accessories: name each one after the machine it fits. Several machines ticked
+    // (and not one shared part) = one accessory per machine.
+    const rows: Record<string, unknown>[] =
+      kind === 'accessory'
+        ? model || shared
+          ? [{ ...row, model_number: fullName(modelNumber.trim(), fits, models), fits_models: fits }]
+          : fits.map((id) => ({ ...row, model_number: fullName(modelNumber.trim(), [id], models), fits_models: [id] }))
+        : [row]
     const { error } = model
-      ? await supabase.from('models').update(row).eq('id', model.id)
-      : await supabase.from('models').insert(row)
+      ? await supabase.from('models').update(rows[0]).eq('id', model.id)
+      : await supabase.from('models').insert(rows)
     setBusy(false)
     if (error) {
       setError(
         error.code === '23505'
           ? kind === 'accessory'
-            ? `"${row.model_number}" already exists. Each accessory needs its own part number, e.g. "${row.model_number} ${models.find((m) => m.id === fits[0])?.model_number ?? 'B600'}" for the one that fits that machine.`
+            ? `This accessory already exists for ${rows.length > 1 ? 'one of those machines' : 'that machine'}: ${rows.map((r) => `"${r.model_number}"`).join(', ')}. Untick the machine(s) it's already been added for.`
             : `Model number "${row.model_number}" already exists.`
           : /fits_models|'kind'|\bkind\b/.test(error.message)
             ? 'Accessories are not switched on yet. Run database/04-accessories-and-task-rules.sql in Supabase first.'
@@ -93,7 +119,7 @@ export function ModelForm({
         </div>
         <Field
           label={kind === 'accessory' ? 'Part / model number *' : 'Model number *'}
-          hint={kind === 'accessory' ? 'The machine it fits is added to the name automatically, e.g. "Thumb" that fits the B600 shows as "Thumb B600".' : undefined}
+          hint={kind === 'accessory' ? 'Just type the part, e.g. Thumb. The machine it fits is added to the name automatically.' : undefined}
         >
           <input className={inputClass} required autoFocus value={modelNumber} onChange={(e) => setModelNumber(e.target.value)} />
         </Field>
@@ -124,7 +150,22 @@ export function ModelForm({
                   </label>
                 ))}
             </div>
-            <p className="mt-1 text-xs text-slate-500">{fits.length} selected</p>
+            {!model && fits.length > 1 && (
+              <label className="mt-2 flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+                <span>One identical part fits all of these machines (otherwise a separate accessory is added for each machine)</span>
+              </label>
+            )}
+            {modelNumber.trim() && fits.length > 0 && (
+              <p className="mt-2 rounded-lg bg-slate-50 p-2 text-sm dark:bg-slate-800/50">
+                Will be saved as:{' '}
+                {(model || shared ? [fullName(modelNumber.trim(), fits, models)] : fits.map((id) => fullName(modelNumber.trim(), [id], models))).map((n) => (
+                  <strong key={n} className="mr-2 inline-block">
+                    {n}
+                  </strong>
+                ))}
+              </p>
+            )}
           </div>
         )}
         <Field label="Sizes" hint="Separate with commas, e.g. Small, Medium, Large. Leave empty if this model comes in one size.">
