@@ -24,6 +24,7 @@ import { History } from './History'
 import { ContainerForm } from './ContainerForm'
 import { CheckInContainer } from './CheckInContainer'
 import { ArrivalHistory } from './ArrivalHistory'
+import { StockOverview } from '../../components/StockOverview'
 
 type Filter = 'all' | MachineStatus
 type Sort = 'model' | 'in_stock' | 'waiting'
@@ -351,6 +352,19 @@ export function MachinesPage() {
           </Button>
         </div>
       </div>
+
+      {data && (
+        <StockOverview
+          models={data.models}
+          machines={data.machines}
+          onStatus={(st) => {
+            const p = new URLSearchParams(params)
+            p.set('status', st)
+            setParams(p, { replace: true })
+          }}
+          onModel={openModel}
+        />
+      )}
 
       {containers.length > 0 && (
         <button

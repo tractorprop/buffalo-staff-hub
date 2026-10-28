@@ -50,6 +50,9 @@ export function TasksPage() {
     return map
   }, [data])
   const allOpen = [...openCount.values()].reduce((a, b) => a + b, 0)
+  const mine = (data?.tasks ?? []).filter((t) => !t.done && t.assignee_id === profile?.id)
+  const mineOverdue = mine.filter((t) => t.due_date && t.due_date < now).length
+  const mineToday = mine.filter((t) => t.due_date === now).length
 
   const list = useMemo(
     () =>
@@ -109,6 +112,33 @@ export function TasksPage() {
           + Add task
         </Button>
       </div>
+
+      {!loading && (
+        <button
+          onClick={() => profile && pick(profile.id)}
+          className={`flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border p-4 text-left ${
+            mineOverdue
+              ? 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+              : mine.length
+                ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10'
+                : 'border-green-300 bg-green-50 dark:border-green-900 dark:bg-green-950/30'
+          }`}
+        >
+          <span className="text-3xl font-bold">{mine.length}</span>
+          <span>
+            <span className="block font-semibold">
+              {mine.length === 0 ? 'You have no tasks to do 🎉' : `You have ${mine.length} task${mine.length === 1 ? '' : 's'} to do`}
+            </span>
+            {(mineOverdue > 0 || mineToday > 0) && (
+              <span className="block text-sm">
+                {mineOverdue > 0 && <span className="font-semibold text-red-600 dark:text-red-400">{mineOverdue} overdue</span>}
+                {mineOverdue > 0 && mineToday > 0 && ' · '}
+                {mineToday > 0 && <span>{mineToday} due today</span>}
+              </span>
+            )}
+          </span>
+        </button>
+      )}
 
       <div className="flex gap-2 overflow-x-auto pb-1">
         {profile && chip(profile.id, 'Me', openCount.get(profile.id) ?? 0)}
