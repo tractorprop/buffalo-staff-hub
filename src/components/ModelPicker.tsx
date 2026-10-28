@@ -74,6 +74,11 @@ export function ModelPicker({
               >
                 {label(m)}
                 {m.sizes.length > 0 && <span className="ml-2 text-xs text-slate-500">({m.sizes.join(', ')})</span>}
+                {m.kind === 'accessory' && (
+                  <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-500 dark:bg-slate-800">
+                    Accessory
+                  </span>
+                )}
               </button>
             </li>
           ))}

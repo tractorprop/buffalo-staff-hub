@@ -56,7 +56,7 @@ export function MachinesPage() {
   const [sort, setSort] = useState<Sort>('model')
   const [open, setOpen] = useState<Set<string>>(new Set(params.get('model') ? [params.get('model')!] : []))
 
-  const [modelForm, setModelForm] = useState<{ model?: Model } | null>(null)
+  const [modelForm, setModelForm] = useState<{ model?: Model; accessoryFor?: string } | null>(null)
   const [machineForm, setMachineForm] = useState<{ machine?: Machine; modelId?: string } | null>(null)
   const [containerForm, setContainerForm] = useState(false)
   const [showContainers, setShowContainers] = useState(false)
@@ -67,6 +67,7 @@ export function MachinesPage() {
   const rows = useMemo(() => {
     if (!data) return []
     const q = search.trim().toLowerCase()
+    const numberOf = (id: string) => data.models.find((m) => m.id === id)
     const list = data.models.map((model) => {
       const machines = data.machines
         .filter((m) => m.model_id === model.id)
@@ -88,6 +89,7 @@ export function MachinesPage() {
           !q ||
           r.model.model_number.toLowerCase().includes(q) ||
           (r.model.name ?? '').toLowerCase().includes(q) ||
+          (r.model.fits_models ?? []).some((id) => `${numberOf(id)?.model_number} ${numberOf(id)?.name ?? ''}`.toLowerCase().includes(q)) ||
           r.machines.some((m) =>
             [m.serial_number, m.container_ref, m.location, m.notes].some((v) => (v ?? '').toLowerCase().includes(q)),
           ),
@@ -100,6 +102,16 @@ export function MachinesPage() {
             : a.model.model_number.localeCompare(b.model.model_number, undefined, { numeric: true }),
       )
   }, [data, search, filter, sort])
+
+  type Row = (typeof rows)[number]
+  const machineRows = rows.filter((r) => r.model.kind !== 'accessory')
+  const accessoryRows = rows.filter((r) => r.model.kind === 'accessory')
+  const inStockOf = (id: string) => data?.machines.filter((m) => m.model_id === id && m.status === 'in_stock').length ?? 0
+
+  function openModel(id: string) {
+    setOpen((prev) => new Set(prev).add(id))
+    setTimeout(() => document.getElementById(`model-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
 
   const totals = useMemo(() => {
     const ms = data?.machines ?? []
@@ -203,6 +215,132 @@ export function MachinesPage() {
     { key: 'sold', label: 'Sold', n: totals.sold },
   ]
 
+  function renderRow(r: Row) {
+            const isOpen = open.has(r.model.id) || (search.trim() !== '' && rows.length <= 3)
+            const shown = filter === 'all' ? r.machines : r.machines.filter((m) => m.status === filter)
+            return (
+              <li key={r.model.id} id={`model-${r.model.id}`} className="scroll-mt-20 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <button onClick={() => toggle(r.model.id)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-left">
+                  <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold">{r.model.model_number}</span>
+                    {r.model.name && <span className="ml-2 text-slate-500 dark:text-slate-400">{r.model.name}</span>}
+                    {r.model.kind === 'accessory' && (r.model.fits_models ?? []).length > 0 && (
+                      <span className="ml-2 text-xs text-slate-400">
+                        Fits {(r.model.fits_models ?? []).map((id) => data?.models.find((m) => m.id === id)?.model_number).filter(Boolean).join(', ')}
+                      </span>
+                    )}
+                    {r.model.sizes.length > 0 && (
+                      <span className="ml-2 text-xs text-slate-400">Sizes: {r.model.sizes.join(', ')}</span>
+                    )}
+                  </span>
+                  <span className="flex flex-wrap gap-1.5">
+                    <CountPill n={r.inStock} label="in stock" tone="green" />
+                    <CountPill n={r.enRoute} label="en route" tone="amber" />
+                    <CountPill n={r.sold} label="sold" tone="grey" />
+                    <CountPill n={r.waiting.length} label="waiting" tone="blue" />
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-4 border-t border-slate-200 px-4 py-4 dark:border-slate-800">
+                    {r.model.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{r.model.notes}</p>}
+
+                    {isManager && (
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
+                          Edit {r.model.kind === 'accessory' ? 'accessory' : 'model'}
+                        </Button>
+                        {r.model.kind !== 'accessory' && (
+                          <Button size="sm" onClick={() => setModelForm({ accessoryFor: r.model.id })}>
+                            + Add accessory for this machine
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => askDeleteModel(r.model)}>
+                          Delete
+                        </Button>
+                      </div>
+                    )}
+
+                    {shown.length === 0 ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        No {filter === 'all' ? '' : filter === 'in_stock' ? 'in-stock ' : filter === 'en_route' ? 'en-route ' : 'sold '}
+                        machines for this model.
+                      </p>
+                    ) : (
+                      <MachineList
+                        machines={shown}
+                        hasSizes={r.model.sizes.length > 0}
+                        isManager={isManager}
+                        onEdit={(m) => setMachineForm({ machine: m })}
+                        onHistory={(m) => setHistory({ machine: m, title: `${r.model.model_number}${m.size ? ` ${m.size}` : ''}` })}
+                        onArrived={(m) => setStatus(m, 'in_stock')}
+                        onSold={(m) => setStatus(m, 'sold')}
+                        onDelete={(m) => askDeleteMachine(m, r.model.model_number)}
+                      />
+                    )}
+
+                    {r.model.kind !== 'accessory' && (() => {
+                      const accs = (data?.models ?? []).filter((m) => m.kind === 'accessory' && (m.fits_models ?? []).includes(r.model.id))
+                      if (!accs.length) return null
+                      return (
+                        <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                          <div className="mb-1 font-medium">Accessories for this machine</div>
+                          <ul className="flex flex-wrap gap-2">
+                            {accs.map((a) => (
+                              <li key={a.id}>
+                                <button
+                                  onClick={() => openModel(a.id)}
+                                  className="rounded-full border border-slate-300 px-2.5 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                                >
+                                  {a.model_number}
+                                  {a.name && <span className="text-slate-500"> {a.name}</span>}
+                                  <span className={`ml-1.5 font-semibold ${inStockOf(a.id) ? 'text-green-700 dark:text-green-400' : 'text-slate-400'}`}>
+                                    {inStockOf(a.id)}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )
+                    })()}
+
+                    <div className="rounded-lg bg-sky-50 p-3 text-sm dark:bg-sky-950/40">
+                      {r.waiting.length === 0 ? (
+                        <span className="text-slate-600 dark:text-slate-300">No customers waiting for this model.</span>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-medium">
+                              {r.waiting.length} customer{r.waiting.length === 1 ? '' : 's'} waiting
+                            </span>
+                            <Link to={`/waitlist?model=${r.model.id}`} className="font-medium text-sky-700 underline dark:text-sky-300">
+                              Open waiting list →
+                            </Link>
+                          </div>
+                          <ul className="mt-2 space-y-1">
+                            {r.waiting.map((w) => (
+                              <li key={w.id} className="flex flex-wrap gap-x-3">
+                                <span>{w.customer_name}</span>
+                                {w.size_wanted && <span className="text-slate-500">wants {w.size_wanted}</span>}
+                                {w.phone && (
+                                  <a href={`tel:${w.phone}`} className="text-sky-700 underline dark:text-sky-300">
+                                    {w.phone}
+                                  </a>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </li>
+            )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -215,7 +353,7 @@ export function MachinesPage() {
             ± Stock entry
           </Link>
           <Button onClick={() => setModelForm({})} disabled={!isManager} title={isManager ? undefined : 'Managers only'}>
-            + Add model
+            + Add model / accessory
           </Button>
           <Button
             variant="primary"
@@ -289,100 +427,25 @@ export function MachinesPage() {
       ) : rows.length === 0 ? (
         <Empty title="Nothing matches">Try a different search or tab.</Empty>
       ) : (
-        <ul className="space-y-2">
-          {rows.map((r) => {
-            const isOpen = open.has(r.model.id) || (search.trim() !== '' && rows.length <= 3)
-            const shown = filter === 'all' ? r.machines : r.machines.filter((m) => m.status === filter)
-            return (
-              <li key={r.model.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                <button onClick={() => toggle(r.model.id)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-left">
-                  <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="font-semibold">{r.model.model_number}</span>
-                    {r.model.name && <span className="ml-2 text-slate-500 dark:text-slate-400">{r.model.name}</span>}
-                    {r.model.sizes.length > 0 && (
-                      <span className="ml-2 text-xs text-slate-400">Sizes: {r.model.sizes.join(', ')}</span>
-                    )}
-                  </span>
-                  <span className="flex flex-wrap gap-1.5">
-                    <CountPill n={r.inStock} label="in stock" tone="green" />
-                    <CountPill n={r.enRoute} label="en route" tone="amber" />
-                    <CountPill n={r.sold} label="sold" tone="grey" />
-                    <CountPill n={r.waiting.length} label="waiting" tone="blue" />
-                  </span>
-                </button>
-
-                {isOpen && (
-                  <div className="space-y-4 border-t border-slate-200 px-4 py-4 dark:border-slate-800">
-                    {r.model.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{r.model.notes}</p>}
-
-                    {isManager && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
-                          Edit model
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => askDeleteModel(r.model)}>
-                          Delete model
-                        </Button>
-                      </div>
-                    )}
-
-                    {shown.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No {filter === 'all' ? '' : filter === 'in_stock' ? 'in-stock ' : filter === 'en_route' ? 'en-route ' : 'sold '}
-                        machines for this model.
-                      </p>
-                    ) : (
-                      <MachineList
-                        machines={shown}
-                        hasSizes={r.model.sizes.length > 0}
-                        isManager={isManager}
-                        onEdit={(m) => setMachineForm({ machine: m })}
-                        onHistory={(m) => setHistory({ machine: m, title: `${r.model.model_number}${m.size ? ` ${m.size}` : ''}` })}
-                        onArrived={(m) => setStatus(m, 'in_stock')}
-                        onSold={(m) => setStatus(m, 'sold')}
-                        onDelete={(m) => askDeleteMachine(m, r.model.model_number)}
-                      />
-                    )}
-
-                    <div className="rounded-lg bg-sky-50 p-3 text-sm dark:bg-sky-950/40">
-                      {r.waiting.length === 0 ? (
-                        <span className="text-slate-600 dark:text-slate-300">No customers waiting for this model.</span>
-                      ) : (
-                        <>
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-medium">
-                              {r.waiting.length} customer{r.waiting.length === 1 ? '' : 's'} waiting
-                            </span>
-                            <Link to={`/waitlist?model=${r.model.id}`} className="font-medium text-sky-700 underline dark:text-sky-300">
-                              Open waiting list →
-                            </Link>
-                          </div>
-                          <ul className="mt-2 space-y-1">
-                            {r.waiting.map((w) => (
-                              <li key={w.id} className="flex flex-wrap gap-x-3">
-                                <span>{w.customer_name}</span>
-                                {w.size_wanted && <span className="text-slate-500">wants {w.size_wanted}</span>}
-                                {w.phone && (
-                                  <a href={`tel:${w.phone}`} className="text-sky-700 underline dark:text-sky-300">
-                                    {w.phone}
-                                  </a>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          {machineRows.length > 0 && (
+            <section className="space-y-2">
+              {accessoryRows.length > 0 && <h2 className="text-lg font-semibold">Machines</h2>}
+              <ul className="space-y-2">{machineRows.map(renderRow)}</ul>
+            </section>
+          )}
+          {accessoryRows.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-lg font-semibold">Accessories</h2>
+              <ul className="space-y-2">{accessoryRows.map(renderRow)}</ul>
+            </section>
+          )}
+        </>
       )}
 
-      {modelForm && <ModelForm model={modelForm.model} onClose={() => setModelForm(null)} />}
+      {modelForm && data && (
+        <ModelForm model={modelForm.model} models={data.models} accessoryFor={modelForm.accessoryFor} onClose={() => setModelForm(null)} />
+      )}
       {machineForm && data && (
         <MachineForm
           models={data.models}

@@ -30,7 +30,7 @@ const priorityClass = {
 const priorityRank = { High: 0, Normal: 1, Low: 2 }
 
 export function TasksPage() {
-  const { profile } = useAuth()
+  const { profile, isManager } = useAuth()
   const profiles = useProfiles()
   const { data, error, loading } = useLive<Data>(['tasks', 'models'], loadAll)
   const [params, setParams] = useSearchParams()
@@ -39,6 +39,8 @@ export function TasksPage() {
   const [showDone, setShowDone] = useState(false)
   const [form, setForm] = useState<{ task?: Task } | null>(null)
   const [confirm, setConfirm] = useState<Task | null>(null)
+  // Task waiting for the second "Has this job been completed?" step.
+  const [confirmDone, setConfirmDone] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
   const now = today()
 
@@ -69,6 +71,7 @@ export function TasksPage() {
   }
 
   async function setDone(t: Task, done: boolean, allowUndo = true) {
+    setConfirmDone(null)
     const { error } = await supabase!.from('tasks').update({ done }).eq('id', t.id)
     if (error) return setToast({ text: friendlyError(error) })
     if (allowUndo) setToast({ text: done ? 'Task completed. 👍' : 'Task reopened.', undo: () => setDone(t, !done, false) })
@@ -140,13 +143,18 @@ export function TasksPage() {
           {list.map((t) => {
             const overdue = !t.done && t.due_date && t.due_date < now
             const model = t.related_model && data?.models.find((m) => m.model_number === t.related_model)
+            const canComplete = !t.assignee_id || t.assignee_id === profile?.id
+            const canDelete = isManager || !t.assignee_id || t.assignee_id === profile?.id
+            const asking = confirmDone === t.id
             return (
               <li key={t.id} className={`flex items-start gap-3 px-4 py-3 ${overdue ? 'bg-red-50 dark:bg-red-950/30' : ''}`}>
                 <input
                   type="checkbox"
-                  checked={t.done}
-                  onChange={(e) => setDone(t, e.target.checked)}
-                  className="mt-1 h-5 w-5 shrink-0 accent-green-600"
+                  checked={t.done || asking}
+                  disabled={!canComplete}
+                  onChange={(e) => (e.target.checked ? setConfirmDone(t.id) : asking ? setConfirmDone(null) : setDone(t, false))}
+                  className="mt-1 h-5 w-5 shrink-0 accent-green-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  title={canComplete ? undefined : `Only ${personName(profiles, t.assignee_id)} can complete this task`}
                   aria-label={t.done ? 'Mark as not done' : 'Mark as completed'}
                 />
                 <div className="min-w-0 flex-1">
@@ -166,14 +174,27 @@ export function TasksPage() {
                       </Link>
                     )}
                   </div>
+                  {asking && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-green-300 bg-green-50 p-2 text-sm dark:border-green-900 dark:bg-green-950/40">
+                      <span className="font-medium">Has this job been completed?</span>
+                      <Button size="sm" variant="primary" onClick={() => setDone(t, true)}>
+                        Yes, it's completed
+                      </Button>
+                      <Button size="sm" onClick={() => setConfirmDone(null)}>
+                        Not yet
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button size="sm" variant="ghost" onClick={() => setForm({ task: t })}>
                     Edit
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirm(t)}>
-                    Delete
-                  </Button>
+                  {canDelete && (
+                    <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirm(t)}>
+                      Delete
+                    </Button>
+                  )}
                 </div>
               </li>
             )
@@ -185,6 +206,7 @@ export function TasksPage() {
         <TaskForm
           task={form.task}
           profiles={profiles}
+          lockAssignee={!isManager && !!form.task?.assignee_id && form.task.assignee_id !== profile?.id}
           defaultAssignee={who !== 'all' && who !== 'none' ? who : undefined}
           onClose={() => setForm(null)}
         />

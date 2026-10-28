@@ -7,8 +7,10 @@ export function TaskForm({
   task,
   profiles,
   defaultAssignee,
+  lockAssignee = false,
   onClose,
 }: {
+  lockAssignee?: boolean
   task?: Task
   profiles: Profile[]
   defaultAssignee?: string
@@ -41,8 +43,8 @@ export function TaskForm({
         <Field label="Task *">
           <input className={inputClass} required autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
-        <Field label="Assigned to">
-          <select className={inputClass} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+        <Field label="Assigned to" hint={lockAssignee ? 'Only a manager can reassign a task that belongs to someone else.' : undefined}>
+          <select className={inputClass} disabled={lockAssignee} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
             <option value="">Nobody yet</option>
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>

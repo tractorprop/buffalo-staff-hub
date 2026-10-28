@@ -14,6 +14,8 @@ export interface Model {
   sizes: string[]
   notes: string | null
   reorder_level?: number | null // low-stock level; missing until 03-calendar-and-low-stock.sql is run
+  kind?: 'machine' | 'accessory' // missing until 04-accessories-and-task-rules.sql is run
+  fits_models?: string[] // for accessories: the machine models it fits
   created_at: string
 }
 
