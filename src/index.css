@@ -2,13 +2,15 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Brand colours: change these when the real brand colours arrive. */
+/* Brand colours: Buffalo yellow (#FDDA03) and black. */
 @theme {
-  --color-brand-50: #fff7ed;
-  --color-brand-100: #ffedd5;
-  --color-brand-500: #f97316;
-  --color-brand-600: #ea580c;
-  --color-brand-700: #c2410c;
+  --color-brand-50: #fffbe6;
+  --color-brand-100: #fff3b0;
+  --color-brand-400: #ffe433;
+  --color-brand-500: #fdda03;
+  --color-brand-600: #e0bf00;
+  --color-brand-700: #6b5a00; /* dark gold, readable on white */
+  --color-ink: #0b0b0b;
 }
 
 html,

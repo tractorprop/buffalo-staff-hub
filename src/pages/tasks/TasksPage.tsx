@@ -89,12 +89,12 @@ export function TasksPage() {
       onClick={() => pick(id)}
       className={`flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium ${
         who === id
-          ? 'border-brand-600 bg-brand-600 text-white'
+          ? 'border-brand-600 bg-brand-500 text-ink'
           : 'border-slate-300 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800'
       }`}
     >
       {label}
-      <span className={`rounded-full px-1.5 text-xs ${who === id ? 'bg-white/25' : 'bg-slate-100 dark:bg-slate-800'}`}>{n}</span>
+      <span className={`rounded-full px-1.5 text-xs ${who === id ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800'}`}>{n}</span>
     </button>
   )
 
@@ -124,7 +124,7 @@ export function TasksPage() {
             <button
               key={String(d)}
               onClick={() => setShowDone(d)}
-              className={`rounded-md px-3 py-1 text-sm font-medium ${showDone === d ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}
+              className={`rounded-md px-3 py-1 text-sm font-medium ${showDone === d ? 'bg-brand-500 text-ink' : 'text-slate-600 dark:text-slate-300'}`}
             >
               {d ? 'Completed' : 'To do'}
             </button>

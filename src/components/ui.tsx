@@ -4,7 +4,7 @@ import type { MachineStatus } from '../lib/types'
 // ---------- Buttons ----------
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700',
+  primary: 'bg-brand-500 text-ink hover:bg-brand-400',
   secondary:
     'border border-slate-300 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800',
   danger: 'bg-red-600 text-white hover:bg-red-700',

@@ -9,6 +9,7 @@ import { addDays, overlaps } from '../lib/dates'
 import type { Machine, Model } from '../lib/types'
 import { ErrorText, Loading, fmtDate, today } from '../components/ui'
 import { Legend, MonthCalendar } from '../components/MonthCalendar'
+import { ContainerTimeline } from '../components/ContainerTimeline'
 
 interface Data {
   models: Model[]
@@ -108,6 +109,7 @@ export function DashboardPage() {
         .filter((m) => m.reorder_level != null && (inStockBy.get(m.id) ?? 0) <= m.reorder_level)
         .map((m) => ({ model: m, inStock: inStockBy.get(m.id) ?? 0, enRoute: enRouteBy.get(m.id) ?? 0 }))
         .sort((a, b) => a.inStock - b.inStock),
+      containers,
       arriving: containers.filter((c) => c.eta && c.eta <= addDays(now, 28)),
       noEta: containers.filter((c) => !c.eta).length,
       offToday: leave.filter((h) => overlaps(h.start_date, h.end_date, now, now)),
@@ -135,7 +137,7 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="In stock" value={d.inStock} to="/machines?status=in_stock" tone="text-green-700 dark:text-green-400" />
-        <Stat label="En route" value={d.enRoute} to="/machines?status=en_route" tone="text-amber-600 dark:text-amber-400" />
+        <Stat label="🚢 En route" value={d.enRoute} to="/machines?status=en_route" tone="text-amber-600 dark:text-amber-400" />
         <Stat label="Sold this month" value={d.soldThisMonth} to="/machines?status=sold" tone="text-slate-700 dark:text-slate-300" />
         <Stat label={d.myOverdue ? `My tasks (${d.myOverdue} overdue)` : 'My tasks'} value={d.myTasks} to="/tasks" tone={d.myOverdue ? 'text-red-600' : ''} />
         <Stat label="Off today" value={d.offToday.length} to="/calendar" tone="text-sky-700 dark:text-sky-400" />
@@ -199,7 +201,7 @@ export function DashboardPage() {
               {d.arriving.map((c) => (
                 <li key={c.ref} className="py-1.5">
                   <div className="flex flex-wrap gap-x-3">
-                    <span className="font-semibold">{c.ref}</span>
+                    <span className="font-semibold">📦 {c.ref}</span>
                     <span className={c.eta! < now ? 'font-semibold text-red-600' : 'text-slate-600 dark:text-slate-300'}>
                       {c.eta! < now ? `Overdue (ETA ${fmtDate(c.eta)})` : `ETA ${fmtDate(c.eta)}`}
                     </span>
@@ -213,6 +215,8 @@ export function DashboardPage() {
           {d.noEta > 0 && <p className="mt-2 text-xs text-slate-500">+ {d.noEta} container{d.noEta === 1 ? '' : 's'} with no ETA set.</p>}
         </Card>
       </div>
+
+      <ContainerTimeline containers={d.containers} today={now} />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">

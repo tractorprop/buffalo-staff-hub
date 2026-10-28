@@ -22,6 +22,7 @@ import { ModelForm } from './ModelForm'
 import { MachineForm } from './MachineForm'
 import { History } from './History'
 import { ContainerForm } from './ContainerForm'
+import { CheckInContainer } from './CheckInContainer'
 
 type Filter = 'all' | MachineStatus
 type Sort = 'model' | 'in_stock' | 'waiting'
@@ -60,6 +61,7 @@ export function MachinesPage() {
   const [machineForm, setMachineForm] = useState<{ machine?: Machine; modelId?: string } | null>(null)
   const [containerForm, setContainerForm] = useState(false)
   const [showContainers, setShowContainers] = useState(false)
+  const [checkIn, setCheckIn] = useState<string | null>(null)
   const [history, setHistory] = useState<{ machine: Machine; title: string } | null>(null)
   const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel?: string; run: () => Promise<void> } | null>(null)
   const [toast, setToast] = useState('')
@@ -190,23 +192,6 @@ export function MachinesPage() {
       })
       .sort((a, b) => (a.eta ?? '9999').localeCompare(b.eta ?? '9999'))
   }, [data])
-
-  function askContainerArrived(ref: string, total: number) {
-    setConfirm({
-      title: `Container ${ref} arrived?`,
-      message: `All ${total} machine${total === 1 ? '' : 's'} in this container will be marked as In stock. Customers waiting for these models will get a "call" task automatically.`,
-      confirmLabel: 'Mark arrived',
-      run: async () => {
-        const { error } = await supabase!
-          .from('machines')
-          .update({ status: 'in_stock' })
-          .eq('container_ref', ref)
-          .eq('status', 'en_route')
-        if (error) setToast(friendlyError(error))
-        setConfirm(null)
-      },
-    })
-  }
 
   const tabs: { key: Filter; label: string; n: number }[] = [
     { key: 'all', label: 'All models', n: totals.all },
@@ -464,7 +449,7 @@ export function MachinesPage() {
                 <li key={c.ref} className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-sm sm:flex-row sm:items-center dark:border-slate-800">
                   <div className="min-w-0 flex-1">
                     <div className="font-medium">
-                      {c.ref}
+                      📦 {c.ref}
                       <span className="ml-2 font-normal text-slate-500">
                         {c.total} machine{c.total === 1 ? '' : 's'}
                         {c.eta && ` · ETA ${fmtDate(c.eta)}`}
@@ -473,8 +458,15 @@ export function MachinesPage() {
                     <div className="text-slate-600 dark:text-slate-300">{c.contents.map(([label, n]) => `${n}× ${label}`).join(', ')}</div>
                   </div>
                   {isManager && (
-                    <Button size="sm" variant="primary" onClick={() => askContainerArrived(c.ref, c.total)}>
-                      Mark container arrived
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => {
+                        setShowContainers(false)
+                        setCheckIn(c.ref)
+                      }}
+                    >
+                      Check in container
                     </Button>
                   )}
                 </li>
@@ -482,6 +474,18 @@ export function MachinesPage() {
             </ul>
           )}
         </Modal>
+      )}
+      {checkIn && data && (
+        <CheckInContainer
+          containerRef={checkIn}
+          machines={data.machines}
+          models={data.models}
+          onClose={() => setCheckIn(null)}
+          onDone={(summary) => {
+            setCheckIn(null)
+            setToast(summary)
+          }}
+        />
       )}
       {containerForm && data && <ContainerForm models={data.models} onClose={() => setContainerForm(false)} />}
       {history && data && (

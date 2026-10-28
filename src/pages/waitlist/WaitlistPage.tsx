@@ -140,7 +140,7 @@ export function WaitlistPage() {
               key={k}
               onClick={() => setShow(k)}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium ${
-                show === k ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-300'
+                show === k ? 'bg-brand-500 text-ink' : 'text-slate-600 dark:text-slate-300'
               }`}
             >
               {label}
