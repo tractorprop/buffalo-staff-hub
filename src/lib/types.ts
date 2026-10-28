@@ -16,6 +16,7 @@ export interface Model {
   reorder_level?: number | null // low-stock level; missing until 03-calendar-and-low-stock.sql is run
   kind?: 'machine' | 'accessory' // missing until 04-accessories-and-task-rules.sql is run
   fits_models?: string[] // for accessories: the machine models it fits
+  category?: 'Construction' | 'Forestry' | 'Agriculture' | null // missing until 05-categories.sql is run
   created_at: string
 }
 

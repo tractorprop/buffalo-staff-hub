@@ -111,9 +111,48 @@ export function MachinesPage() {
   type Row = (typeof rows)[number]
   const machineRows = rows.filter((r) => r.model.kind !== 'accessory')
   const accessoryRows = rows.filter((r) => r.model.kind === 'accessory')
+  // Category tabs (Construction / Forestry / Agriculture). Accessories follow the machine they fit.
+  const categories = ['Construction', 'Forestry', 'Agriculture'] as const
+  const machineModels = (data?.models ?? []).filter(isMachine)
+  const categoriesInUse = machineModels.some((m) => m.category)
+  const catCount = (c: string) => machineModels.filter((m) => (c === 'none' ? !m.category : m.category === c)).length
+  const linked = data?.models.find((m) => m.id === params.get('model'))
+  const linkedMachine = linked && (isMachine(linked) ? linked : data?.models.find((x) => x.id === linked.fits_models?.[0]))
+  const category =
+    params.get('cat') ??
+    (linkedMachine ? linkedMachine.category ?? (categoriesInUse ? 'none' : 'all') : null) ??
+    (categoriesInUse ? categories.find((c) => catCount(c) > 0) ?? 'all' : 'all')
+  const inCategory = (m: Model) => category === 'all' || (category === 'none' ? !m.category : m.category === category)
+  const searching = search.trim() !== ''
+  const shownMachineRows = searching ? machineRows : machineRows.filter((r) => inCategory(r.model))
+  const accessoryGroups = machineModels
+    .filter(inCategory)
+    .map((m) => ({ machine: m, rows: accessoryRows.filter((r) => (r.model.fits_models ?? []).includes(m.id)) }))
+    .filter((g) => g.rows.length > 0)
+    .sort((a, b) => a.machine.model_number.localeCompare(b.machine.model_number, undefined, { numeric: true }))
+  const unlinkedAccessories = category === 'all' ? accessoryRows.filter((r) => !(r.model.fits_models ?? []).length) : []
+  const [openAcc, setOpenAcc] = useState<Set<string>>(new Set())
+  const toggleAcc = (id: string) =>
+    setOpenAcc((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  function setCategory(c: string) {
+    const p = new URLSearchParams(params)
+    p.set('cat', c)
+    setParams(p, { replace: true })
+  }
+
   const inStockOf = (id: string) => data?.machines.filter((m) => m.model_id === id && m.status === 'in_stock').length ?? 0
 
   function openModel(id: string) {
+    // Switch to the right category, and open the accessory group, so the model is visible.
+    const m = data?.models.find((x) => x.id === id)
+    const machine = m && (isMachine(m) ? m : data?.models.find((x) => x.id === m.fits_models?.[0]))
+    if (machine && !inCategory(machine)) setCategory(machine.category ?? (categoriesInUse ? 'none' : 'all'))
+    if (m && !isMachine(m)) setOpenAcc((prev) => new Set(prev).add(m.fits_models?.[0] ?? 'unlinked'))
     setOpen((prev) => new Set(prev).add(id))
     setTimeout(() => document.getElementById(`model-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
@@ -280,7 +319,10 @@ export function MachinesPage() {
                             {accs.map((a) => (
                               <li key={a.id}>
                                 <button
-                                  onClick={() => openModel(a.id)}
+                                  onClick={() => {
+                                    setOpenAcc((prev) => new Set(prev).add(r.model.id))
+                                    openModel(a.id)
+                                  }}
                                   className="rounded-full border border-slate-300 px-2.5 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                                 >
                                   {a.model_number}
@@ -384,6 +426,30 @@ export function MachinesPage() {
         </button>
       )}
 
+      {machineModels.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[...categories, 'all', ...(categoriesInUse && catCount('none') > 0 ? ['none'] : [])].map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={`rounded-xl border-2 px-3 py-2.5 text-left ${
+                category === c && !searching
+                  ? 'border-ink bg-ink text-brand-500 dark:border-brand-500 dark:bg-brand-500 dark:text-ink'
+                  : 'border-slate-200 bg-white hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900'
+              }`}
+            >
+              <div className="font-semibold">
+                {c === 'Construction' ? '🚜 ' : c === 'Forestry' ? '🌲 ' : c === 'Agriculture' ? '🌾 ' : ''}
+                {c === 'all' ? 'All machines' : c === 'none' ? 'No category' : c}
+              </div>
+              <div className="text-xs opacity-70">
+                {c === 'all' ? machineModels.length : catCount(c)} model{(c === 'all' ? machineModels.length : catCount(c)) === 1 ? '' : 's'}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
         {tabs.map((t) => (
           <button
@@ -431,17 +497,64 @@ export function MachinesPage() {
         <Empty title="Nothing matches">Try a different search or tab.</Empty>
       ) : (
         <>
-          {machineRows.length > 0 && (
-            <section className="space-y-2">
-              {accessoryRows.length > 0 && <h2 className="text-lg font-semibold">Machines</h2>}
-              <ul className="space-y-2">{machineRows.map(renderRow)}</ul>
-            </section>
-          )}
-          {accessoryRows.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="text-lg font-semibold">Accessories</h2>
-              <ul className="space-y-2">{accessoryRows.map(renderRow)}</ul>
-            </section>
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold">
+              {searching ? 'Machines matching your search' : category === 'all' ? 'All machines' : category === 'none' ? 'Machines with no category' : `${category} machines`}
+            </h2>
+            {shownMachineRows.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {searching
+                  ? 'No machines match.'
+                  : catCount(category) === 0 && category !== 'all'
+                    ? isManager
+                      ? 'No machines in this category yet. Open a machine and click "Edit model" to set its category.'
+                      : 'No machines in this category yet.'
+                    : 'No machines here match this tab.'}
+              </p>
+            ) : (
+              <ul className="space-y-2">{shownMachineRows.map(renderRow)}</ul>
+            )}
+          </section>
+
+          {searching ? (
+            accessoryRows.length > 0 && (
+              <section className="space-y-2">
+                <h2 className="text-lg font-semibold">Accessories matching your search</h2>
+                <ul className="space-y-2">{accessoryRows.map(renderRow)}</ul>
+              </section>
+            )
+          ) : (
+            (accessoryGroups.length > 0 || unlinkedAccessories.length > 0) && (
+              <section className="space-y-2">
+                <h2 className="text-lg font-semibold">Accessories</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Click a machine to see its accessories.</p>
+                <ul className="space-y-2">
+                  {[
+                    ...accessoryGroups.map((g) => ({ key: g.machine.id, title: g.machine.model_number, sub: g.machine.name, rows: g.rows })),
+                    ...(unlinkedAccessories.length ? [{ key: 'unlinked', title: 'Not linked to a machine', sub: null, rows: unlinkedAccessories }] : []),
+                  ].map((g) => {
+                    const isOpen = openAcc.has(g.key)
+                    const stock = g.rows.reduce((n, r) => n + r.inStock, 0)
+                    return (
+                      <li key={g.key} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
+                        <button onClick={() => toggleAcc(g.key)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left">
+                          <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="font-semibold">🔧 {g.key === 'unlinked' ? g.title : `Accessories for ${g.title}`}</span>
+                            {g.sub && <span className="ml-2 text-slate-500 dark:text-slate-400">{g.sub}</span>}
+                          </span>
+                          <span className="flex gap-1.5">
+                            <CountPill n={g.rows.length} label={g.rows.length === 1 ? 'accessory' : 'accessories'} tone="grey" />
+                            <CountPill n={stock} label="in stock" tone="green" />
+                          </span>
+                        </button>
+                        {isOpen && <ul className="space-y-2 border-t border-slate-200 p-2 dark:border-slate-800">{g.rows.map(renderRow)}</ul>}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )
           )}
         </>
       )}
@@ -449,7 +562,10 @@ export function MachinesPage() {
       {data && <ArrivalHistory models={data.models} />}
 
       {modelForm && data && (
-        <ModelForm model={modelForm.model} models={data.models} accessoryFor={modelForm.accessoryFor} onClose={() => setModelForm(null)} />
+        <ModelForm
+          defaultCategory={categories.includes(category as (typeof categories)[number]) ? (category as Model['category']) : null}
+          model={modelForm.model}
+          models={data.models} accessoryFor={modelForm.accessoryFor} onClose={() => setModelForm(null)} />
       )}
       {machineForm && data && (
         <MachineForm

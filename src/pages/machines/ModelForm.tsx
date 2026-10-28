@@ -22,8 +22,10 @@ export function ModelForm({
   model,
   models,
   accessoryFor,
+  defaultCategory,
   onClose,
 }: {
+  defaultCategory?: Model['category']
   model?: Model
   models: Model[]
   accessoryFor?: string // pre-fill as an accessory for this machine model
@@ -40,6 +42,7 @@ export function ModelForm({
   const [modelNumber, setModelNumber] = useState(() => (model ? baseName(model.model_number, model.fits_models ?? [], models) : ''))
   const [shared, setShared] = useState((model?.fits_models?.length ?? 0) > 1)
   const [name, setName] = useState(model?.name ?? '')
+  const [category, setCategory] = useState<string>(model ? model.category ?? '' : defaultCategory ?? '')
   const [sizes, setSizes] = useState((model?.sizes ?? []).join(', '))
   const [notes, setNotes] = useState(model?.notes ?? '')
   const [reorder, setReorder] = useState(model?.reorder_level != null ? String(model.reorder_level) : '')
@@ -64,6 +67,8 @@ export function ModelForm({
       row.kind = kind
       row.fits_models = kind === 'accessory' ? fits : []
     }
+    // Only send the category once the database has that column (or one was chosen).
+    if (kind === 'machine' && (category !== '' || model?.category !== undefined)) row.category = category || null
     // Only send the low-stock level once the database has that column (or one was typed).
     if (reorder !== '' || model?.reorder_level !== undefined) row.reorder_level = reorder === '' ? null : Math.max(0, parseInt(reorder) || 0)
     // Accessories: name each one after the machine it fits. Several machines ticked
@@ -84,6 +89,8 @@ export function ModelForm({
           ? kind === 'accessory'
             ? `This accessory already exists for ${rows.length > 1 ? 'one of those machines' : 'that machine'}: ${rows.map((r) => `"${r.model_number}"`).join(', ')}. Untick the machine(s) it's already been added for.`
             : `Model number "${row.model_number}" already exists.`
+          : /category/.test(error.message)
+            ? 'Categories are not switched on yet. Run database/05-categories.sql in Supabase first.'
           : /fits_models|'kind'|\bkind\b/.test(error.message)
             ? 'Accessories are not switched on yet. Run database/04-accessories-and-task-rules.sql in Supabase first.'
             : /reorder_level/.test(error.message)
@@ -123,6 +130,24 @@ export function ModelForm({
         >
           <input className={inputClass} required autoFocus value={modelNumber} onChange={(e) => setModelNumber(e.target.value)} />
         </Field>
+        {kind === 'machine' && (
+          <Field label="Category">
+            <div className="grid grid-cols-3 gap-2">
+              {['Construction', 'Forestry', 'Agriculture'].map((c) => (
+                <button
+                  type="button"
+                  key={c}
+                  onClick={() => setCategory(category === c ? '' : c)}
+                  className={`rounded-lg border px-2 py-2 text-sm font-medium ${
+                    category === c ? 'border-brand-600 bg-brand-50 text-brand-700 dark:bg-slate-800 dark:text-brand-500' : 'border-slate-300 dark:border-slate-700'
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
         <Field label="Name">
           <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
