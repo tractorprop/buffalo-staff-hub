@@ -6,7 +6,6 @@ import { applyTheme, currentTheme, type Theme } from './theme'
 
 const links = [
   { to: '/', label: 'Dashboard' },
-  { to: '/models', label: 'Models' },
   { to: '/machines', label: 'Machines' },
   { to: '/waitlist', label: 'Waiting list' },
   { to: '/tasks', label: 'Tasks' },

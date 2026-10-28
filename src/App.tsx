@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
 import { ComingSoon } from './pages/ComingSoon'
+import { MachinesPage } from './pages/machines/MachinesPage'
 
 function Gate() {
   const { session, profile, loading, signOut } = useAuth()
@@ -35,8 +36,8 @@ function Gate() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<ComingSoon title="Dashboard" />} />
-        <Route path="models" element={<ComingSoon title="Models" />} />
-        <Route path="machines" element={<ComingSoon title="Machines" />} />
+        <Route path="models" element={<Navigate to="/machines" replace />} />
+        <Route path="machines" element={<MachinesPage />} />
         <Route path="waitlist" element={<ComingSoon title="Waiting list" />} />
         <Route path="tasks" element={<ComingSoon title="Tasks" />} />
         <Route path="holidays" element={<ComingSoon title="Holidays" />} />

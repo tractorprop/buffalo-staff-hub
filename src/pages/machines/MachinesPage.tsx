@@ -1,0 +1,444 @@
+import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { supabase, friendlyError } from '../../lib/supabase'
+import { useLive } from '../../lib/useLive'
+import { useAuth } from '../../auth/AuthProvider'
+import type { Machine, MachineStatus, Model, WaitlistEntry } from '../../lib/types'
+import {
+  Button,
+  Confirm,
+  CountPill,
+  Empty,
+  ErrorText,
+  Loading,
+  StatusBadge,
+  Toast,
+  fmtDate,
+  inputClass,
+  today,
+} from '../../components/ui'
+import { ModelForm } from './ModelForm'
+import { MachineForm } from './MachineForm'
+import { History } from './History'
+
+type Filter = 'all' | MachineStatus
+type Sort = 'model' | 'in_stock' | 'waiting'
+
+interface Data {
+  models: Model[]
+  machines: Machine[]
+  waiting: WaitlistEntry[]
+}
+
+async function loadAll() {
+  const [models, machines, waiting] = await Promise.all([
+    supabase!.from('models').select('*').order('model_number'),
+    supabase!.from('machines').select('*').order('created_at'),
+    supabase!.from('waitlist').select('*').eq('contacted', false).order('created_at'),
+  ])
+  const error = models.error ?? machines.error ?? waiting.error
+  return {
+    data: error ? null : { models: models.data as Model[], machines: machines.data as Machine[], waiting: waiting.data as WaitlistEntry[] },
+    error,
+  }
+}
+
+const statusOrder: Record<MachineStatus, number> = { in_stock: 0, en_route: 1, sold: 2 }
+
+export function MachinesPage() {
+  const { isManager } = useAuth()
+  const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist'], loadAll)
+  const [params, setParams] = useSearchParams()
+  const filter = (params.get('status') as Filter) || 'all'
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<Sort>('model')
+  const [open, setOpen] = useState<Set<string>>(new Set(params.get('model') ? [params.get('model')!] : []))
+
+  const [modelForm, setModelForm] = useState<{ model?: Model } | null>(null)
+  const [machineForm, setMachineForm] = useState<{ machine?: Machine; modelId?: string } | null>(null)
+  const [history, setHistory] = useState<{ machine: Machine; title: string } | null>(null)
+  const [confirm, setConfirm] = useState<{ title: string; message: string; run: () => Promise<void> } | null>(null)
+  const [toast, setToast] = useState('')
+
+  const rows = useMemo(() => {
+    if (!data) return []
+    const q = search.trim().toLowerCase()
+    const list = data.models.map((model) => {
+      const machines = data.machines
+        .filter((m) => m.model_id === model.id)
+        .sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || (a.size ?? '').localeCompare(b.size ?? ''))
+      const count = (s: MachineStatus) => machines.filter((m) => m.status === s).length
+      return {
+        model,
+        machines,
+        waiting: data.waiting.filter((w) => w.model_id === model.id),
+        inStock: count('in_stock'),
+        enRoute: count('en_route'),
+        sold: count('sold'),
+      }
+    })
+    return list
+      .filter((r) => filter === 'all' || r.machines.some((m) => m.status === filter))
+      .filter(
+        (r) =>
+          !q ||
+          r.model.model_number.toLowerCase().includes(q) ||
+          (r.model.name ?? '').toLowerCase().includes(q) ||
+          r.machines.some((m) =>
+            [m.serial_number, m.container_ref, m.location, m.notes].some((v) => (v ?? '').toLowerCase().includes(q)),
+          ),
+      )
+      .sort((a, b) =>
+        sort === 'in_stock'
+          ? b.inStock - a.inStock
+          : sort === 'waiting'
+            ? b.waiting.length - a.waiting.length
+            : a.model.model_number.localeCompare(b.model.model_number, undefined, { numeric: true }),
+      )
+  }, [data, search, filter, sort])
+
+  const totals = useMemo(() => {
+    const ms = data?.machines ?? []
+    return {
+      all: data?.models.length ?? 0,
+      in_stock: ms.filter((m) => m.status === 'in_stock').length,
+      en_route: ms.filter((m) => m.status === 'en_route').length,
+      sold: ms.filter((m) => m.status === 'sold').length,
+    }
+  }, [data])
+
+  function toggle(id: string) {
+    setOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function setStatus(m: Machine, status: MachineStatus) {
+    const { error } = await supabase!
+      .from('machines')
+      .update({ status, sold_date: status === 'sold' ? today() : null })
+      .eq('id', m.id)
+    if (error) setToast(friendlyError(error))
+  }
+
+  function askDeleteMachine(m: Machine, modelNumber: string) {
+    setConfirm({
+      title: 'Delete machine?',
+      message: `This permanently removes this ${modelNumber}${m.serial_number ? ` (serial ${m.serial_number})` : ''}. If it was sold, consider keeping it for your records instead.`,
+      run: async () => {
+        const { error } = await supabase!.from('machines').delete().eq('id', m.id)
+        if (error) setToast(friendlyError(error))
+        setConfirm(null)
+      },
+    })
+  }
+
+  function askDeleteModel(model: Model) {
+    setConfirm({
+      title: `Delete model ${model.model_number}?`,
+      message: 'You can only delete a model that has no machines and no waiting customers.',
+      run: async () => {
+        const { error } = await supabase!.from('models').delete().eq('id', model.id)
+        if (error)
+          setToast(
+            error.code === '23503'
+              ? `${model.model_number} still has machines or waiting customers, so it can't be deleted.`
+              : friendlyError(error),
+          )
+        setConfirm(null)
+      },
+    })
+  }
+
+  const tabs: { key: Filter; label: string; n: number }[] = [
+    { key: 'all', label: 'All models', n: totals.all },
+    { key: 'in_stock', label: 'In stock', n: totals.in_stock },
+    { key: 'en_route', label: 'En route', n: totals.en_route },
+    { key: 'sold', label: 'Sold', n: totals.sold },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-bold">Machines</h1>
+        {isManager && (
+          <div className="ml-auto flex gap-2">
+            <Button onClick={() => setModelForm({})}>+ Add model</Button>
+            <Button variant="primary" onClick={() => setMachineForm({})} disabled={!data?.models.length}>
+              + Add machine
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => {
+              const p = new URLSearchParams(params)
+              if (t.key === 'all') p.delete('status')
+              else p.set('status', t.key)
+              setParams(p, { replace: true })
+            }}
+            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${
+              filter === t.key
+                ? 'border-brand-600 text-brand-700 dark:text-brand-500'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            {t.label} <span className="ml-1 text-xs opacity-70">{t.n}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          className={inputClass}
+          placeholder="Search model, name, serial number, container…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select className={`${inputClass} sm:w-56`} value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+          <option value="model">Sort: Model number</option>
+          <option value="in_stock">Sort: Most in stock</option>
+          <option value="waiting">Sort: Most customers waiting</option>
+        </select>
+      </div>
+
+      <ErrorText>{error}</ErrorText>
+
+      {loading ? (
+        <Loading />
+      ) : !data?.models.length ? (
+        <Empty title="No models yet">
+          {isManager ? 'Click "+ Add model" to add the first model you sell.' : 'A manager needs to add the models you sell.'}
+        </Empty>
+      ) : rows.length === 0 ? (
+        <Empty title="Nothing matches">Try a different search or tab.</Empty>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((r) => {
+            const isOpen = open.has(r.model.id) || (search.trim() !== '' && rows.length <= 3)
+            const shown = filter === 'all' ? r.machines : r.machines.filter((m) => m.status === filter)
+            return (
+              <li key={r.model.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <button onClick={() => toggle(r.model.id)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-left">
+                  <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold">{r.model.model_number}</span>
+                    {r.model.name && <span className="ml-2 text-slate-500 dark:text-slate-400">{r.model.name}</span>}
+                    {r.model.sizes.length > 0 && (
+                      <span className="ml-2 text-xs text-slate-400">Sizes: {r.model.sizes.join(', ')}</span>
+                    )}
+                  </span>
+                  <span className="flex flex-wrap gap-1.5">
+                    <CountPill n={r.inStock} label="in stock" tone="green" />
+                    <CountPill n={r.enRoute} label="en route" tone="amber" />
+                    <CountPill n={r.sold} label="sold" tone="grey" />
+                    <CountPill n={r.waiting.length} label="waiting" tone="blue" />
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-4 border-t border-slate-200 px-4 py-4 dark:border-slate-800">
+                    {r.model.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{r.model.notes}</p>}
+
+                    {isManager && (
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="primary" onClick={() => setMachineForm({ modelId: r.model.id })}>
+                          + Add {r.model.model_number}
+                        </Button>
+                        <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
+                          Edit model
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => askDeleteModel(r.model)}>
+                          Delete model
+                        </Button>
+                      </div>
+                    )}
+
+                    {shown.length === 0 ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        No {filter === 'all' ? '' : filter === 'in_stock' ? 'in-stock ' : filter === 'en_route' ? 'en-route ' : 'sold '}
+                        machines for this model.
+                      </p>
+                    ) : (
+                      <MachineList
+                        machines={shown}
+                        hasSizes={r.model.sizes.length > 0}
+                        isManager={isManager}
+                        onEdit={(m) => setMachineForm({ machine: m })}
+                        onHistory={(m) => setHistory({ machine: m, title: `${r.model.model_number}${m.size ? ` ${m.size}` : ''}` })}
+                        onArrived={(m) => setStatus(m, 'in_stock')}
+                        onSold={(m) => setStatus(m, 'sold')}
+                        onDelete={(m) => askDeleteMachine(m, r.model.model_number)}
+                      />
+                    )}
+
+                    <div className="rounded-lg bg-sky-50 p-3 text-sm dark:bg-sky-950/40">
+                      {r.waiting.length === 0 ? (
+                        <span className="text-slate-600 dark:text-slate-300">No customers waiting for this model.</span>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-medium">
+                              {r.waiting.length} customer{r.waiting.length === 1 ? '' : 's'} waiting
+                            </span>
+                            <Link to={`/waitlist?model=${r.model.id}`} className="font-medium text-sky-700 underline dark:text-sky-300">
+                              Open waiting list →
+                            </Link>
+                          </div>
+                          <ul className="mt-2 space-y-1">
+                            {r.waiting.map((w) => (
+                              <li key={w.id} className="flex flex-wrap gap-x-3">
+                                <span>{w.customer_name}</span>
+                                {w.size_wanted && <span className="text-slate-500">wants {w.size_wanted}</span>}
+                                {w.phone && (
+                                  <a href={`tel:${w.phone}`} className="text-sky-700 underline dark:text-sky-300">
+                                    {w.phone}
+                                  </a>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {modelForm && <ModelForm model={modelForm.model} onClose={() => setModelForm(null)} />}
+      {machineForm && data && (
+        <MachineForm
+          models={data.models}
+          machine={machineForm.machine}
+          defaultModelId={machineForm.modelId}
+          onClose={() => setMachineForm(null)}
+        />
+      )}
+      {history && data && (
+        <History machineId={history.machine.id} title={history.title} models={data.models} onClose={() => setHistory(null)} />
+      )}
+      {confirm && <Confirm title={confirm.title} message={confirm.message} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
+      {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
+    </div>
+  )
+}
+
+function MachineList({
+  machines,
+  hasSizes,
+  isManager,
+  onEdit,
+  onHistory,
+  onArrived,
+  onSold,
+  onDelete,
+}: {
+  machines: Machine[]
+  hasSizes: boolean
+  isManager: boolean
+  onEdit: (m: Machine) => void
+  onHistory: (m: Machine) => void
+  onArrived: (m: Machine) => void
+  onSold: (m: Machine) => void
+  onDelete: (m: Machine) => void
+}) {
+  const actions = (m: Machine) => (
+    <div className="flex flex-wrap gap-1.5">
+      {isManager && m.status === 'en_route' && (
+        <Button size="sm" variant="primary" onClick={() => onArrived(m)}>
+          Mark arrived
+        </Button>
+      )}
+      {isManager && m.status === 'in_stock' && (
+        <Button size="sm" onClick={() => onSold(m)}>
+          Mark sold
+        </Button>
+      )}
+      {isManager && (
+        <Button size="sm" variant="ghost" onClick={() => onEdit(m)}>
+          Edit
+        </Button>
+      )}
+      <Button size="sm" variant="ghost" onClick={() => onHistory(m)}>
+        History
+      </Button>
+      {isManager && (
+        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => onDelete(m)}>
+          Delete
+        </Button>
+      )}
+    </div>
+  )
+
+  const detail = (m: Machine) =>
+    m.status === 'en_route'
+      ? [m.container_ref && `Container ${m.container_ref}`, m.eta && `ETA ${fmtDate(m.eta)}`].filter(Boolean).join(' · ')
+      : m.status === 'sold'
+        ? m.sold_date && `Sold ${fmtDate(m.sold_date)}`
+        : ''
+
+  return (
+    <>
+      {/* Phone layout */}
+      <ul className="space-y-2 md:hidden">
+        {machines.map((m) => (
+          <li key={m.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={m.status} />
+              {hasSizes && <span className="font-medium">{m.size}</span>}
+              {m.serial_number && <span className="text-slate-500">S/N {m.serial_number}</span>}
+            </div>
+            {(detail(m) || m.location) && (
+              <div className="mt-1 text-slate-600 dark:text-slate-300">{[detail(m), m.location].filter(Boolean).join(' · ')}</div>
+            )}
+            {m.notes && <div className="mt-1 text-slate-500">{m.notes}</div>}
+            <div className="mt-2">{actions(m)}</div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop layout */}
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
+            <tr>
+              <th className="py-2 pr-3">Status</th>
+              {hasSizes && <th className="py-2 pr-3">Size</th>}
+              <th className="py-2 pr-3">Serial no.</th>
+              <th className="py-2 pr-3">Container / ETA</th>
+              <th className="py-2 pr-3">Location</th>
+              <th className="py-2 pr-3">Notes</th>
+              <th className="py-2"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {machines.map((m) => (
+              <tr key={m.id} className="align-top">
+                <td className="py-2 pr-3">
+                  <StatusBadge status={m.status} />
+                </td>
+                {hasSizes && <td className="py-2 pr-3 font-medium">{m.size}</td>}
+                <td className="py-2 pr-3">{m.serial_number}</td>
+                <td className="py-2 pr-3">{detail(m)}</td>
+                <td className="py-2 pr-3">{m.location}</td>
+                <td className="py-2 pr-3 text-slate-500">{m.notes}</td>
+                <td className="py-2">{actions(m)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
