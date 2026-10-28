@@ -11,6 +11,7 @@ import { ErrorText, Loading, fmtDate, today } from '../components/ui'
 import { Card, linkClass } from '../components/StockOverview'
 import { Legend, MonthCalendar } from '../components/MonthCalendar'
 import { ContainerTimeline } from '../components/ContainerTimeline'
+import { modelLabel } from '../lib/modelLabel'
 
 interface Data {
   models: Model[]
@@ -97,7 +98,7 @@ export function DashboardPage() {
           <ul className="space-y-2">
             {d.toCall.map((c) => (
               <li key={c.model.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-white px-3 py-2 text-sm dark:bg-slate-900">
-                <span className="font-semibold">{c.model.model_number}</span>
+                <span className="font-semibold">{modelLabel(c.model, data?.models ?? [])}</span>
                 <span className="text-green-700 dark:text-green-400">{c.inStock} in stock</span>
                 <span>
                   {c.waiting} customer{c.waiting === 1 ? '' : 's'} waiting

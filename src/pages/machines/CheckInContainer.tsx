@@ -3,6 +3,7 @@ import { supabase, friendlyError } from '../../lib/supabase'
 import type { Machine, Model } from '../../lib/types'
 import { Button, ErrorText, Field, Modal, inputClass } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
+import { labelFor, modelLabel } from '../../lib/modelLabel'
 
 interface Line {
   key: string
@@ -46,7 +47,7 @@ export function CheckInContainer({
       line.arrived = line.ids.length
       map.set(key, line)
     }
-    const num = (id: string) => models.find((x) => x.id === id)?.model_number ?? ''
+    const num = (id: string) => labelFor(id, models)
     return [...map.values()].sort((a, b) => num(a.modelId).localeCompare(num(b.modelId)) || (a.size ?? '').localeCompare(b.size ?? ''))
   }, [machines, models, containerRef])
 
@@ -58,7 +59,7 @@ export function CheckInContainer({
 
   const label = (modelId: string, size: string | null) => {
     const m = models.find((x) => x.id === modelId)
-    return `${m?.model_number ?? '?'}${size ? ` ${size}` : ''}${m?.name ? ` · ${m.name}` : ''}`
+    return `${modelLabel(m, models, size)}${m?.name ? ` · ${m.name}` : ''}`
   }
   const setLine = (key: string, change: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...change } : l)))
   const setExtra = (key: number, change: Partial<Extra>) => setExtras((es) => es.map((e) => (e.key === key ? { ...e, ...change } : e)))

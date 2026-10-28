@@ -4,6 +4,7 @@ import { useLive } from '../../lib/useLive'
 import { personName, useProfiles } from '../../lib/useProfiles'
 import type { AuditEntry, Model } from '../../lib/types'
 import { Button, ErrorText, fmtDateTime, inputClass } from '../../components/ui'
+import { labelFor } from '../../lib/modelLabel'
 
 type Row = { model_id?: string; size?: string | null; status?: string; container_ref?: string | null; notes?: string | null }
 
@@ -77,7 +78,7 @@ export function ArrivalHistory({ models }: { models: Model[] }) {
   const { data, error, loading } = useLive<AuditEntry[]>(['machines'], () => load(days), [days])
 
   const arrivals = useMemo(() => {
-    const label = (r: Row) => `${models.find((m) => m.id === r.model_id)?.model_number ?? '?'}${r.size ? ` ${r.size}` : ''}`
+    const label = (r: Row) => labelFor(r.model_id ?? '', models, r.size)
     const q = search.trim().toLowerCase()
     return group(data ?? [], label).filter(
       (a) => !q || `${a.ref} ${personName(profiles, a.by)} ${list(a.arrived)} ${list(a.extra)}`.toLowerCase().includes(q),

@@ -3,6 +3,7 @@ import { useLive } from '../../lib/useLive'
 import { personName, useProfiles } from '../../lib/useProfiles'
 import type { AuditEntry, Model } from '../../lib/types'
 import { ErrorText, Loading, Modal, fmtDateTime, statusLabel } from '../../components/ui'
+import { labelFor } from '../../lib/modelLabel'
 
 const fieldLabels: Record<string, string> = {
   model_id: 'Model',
@@ -19,7 +20,7 @@ const fieldLabels: Record<string, string> = {
 function show(field: string, v: unknown, models: Model[]): string {
   if (v === null || v === undefined || v === '') return '(empty)'
   if (field === 'status') return statusLabel[v as keyof typeof statusLabel] ?? String(v)
-  if (field === 'model_id') return models.find((m) => m.id === v)?.model_number ?? 'another model'
+  if (field === 'model_id') return models.some((m) => m.id === v) ? labelFor(v as string, models) : 'another model'
   return String(v)
 }
 

@@ -5,6 +5,7 @@ import { personName, useProfiles } from '../../lib/useProfiles'
 import type { AuditEntry, Model } from '../../lib/types'
 import { Button, ErrorText, Loading, fmtDateTime, inputClass } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
+import { modelLabel as nameOf } from '../../lib/modelLabel'
 
 type Direction = 'out' | 'in'
 
@@ -87,10 +88,7 @@ export function StockEntryPage() {
   }, [data])
 
   const update = (key: number, change: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...change } : l)))
-  const modelLabel = (id: string, size?: string | null) => {
-    const m = data?.models.find((x) => x.id === id)
-    return `${m?.model_number ?? '?'}${size ? ` ${size}` : ''}`
-  }
+  const modelLabel = (id: string, size?: string | null) => nameOf(data?.models.find((x) => x.id === id), data?.models ?? [], size)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -134,7 +132,7 @@ export function StockEntryPage() {
       if (person && g.by !== person) return false
       if (!q) return true
       const m = data?.models.find((x) => x.id === g.modelId)
-      return `${m?.model_number ?? ''} ${m?.name ?? ''} ${g.size ?? ''}`.toLowerCase().includes(q)
+      return `${nameOf(m, data?.models ?? [])} ${m?.name ?? ''} ${g.size ?? ''}`.toLowerCase().includes(q)
     })
   }, [data, person, modelSearch])
 

@@ -55,7 +55,9 @@ export function ModelForm({
     if (error) {
       setError(
         error.code === '23505'
-          ? `Model number "${row.model_number}" already exists.`
+          ? kind === 'accessory'
+            ? `"${row.model_number}" already exists. Each accessory needs its own part number, e.g. "${row.model_number} ${models.find((m) => m.id === fits[0])?.model_number ?? 'B600'}" for the one that fits that machine.`
+            : `Model number "${row.model_number}" already exists.`
           : /fits_models|'kind'|\bkind\b/.test(error.message)
             ? 'Accessories are not switched on yet. Run database/04-accessories-and-task-rules.sql in Supabase first.'
             : /reorder_level/.test(error.message)
@@ -89,7 +91,10 @@ export function ModelForm({
             </button>
           ))}
         </div>
-        <Field label={kind === 'accessory' ? 'Part / model number *' : 'Model number *'}>
+        <Field
+          label={kind === 'accessory' ? 'Part / model number *' : 'Model number *'}
+          hint={kind === 'accessory' ? 'The machine it fits is added to the name automatically, e.g. "Thumb" that fits the B600 shows as "Thumb B600".' : undefined}
+        >
           <input className={inputClass} required autoFocus value={modelNumber} onChange={(e) => setModelNumber(e.target.value)} />
         </Field>
         <Field label="Name">

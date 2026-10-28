@@ -25,6 +25,7 @@ import { ContainerForm } from './ContainerForm'
 import { CheckInContainer } from './CheckInContainer'
 import { ArrivalHistory } from './ArrivalHistory'
 import { StockOverview } from '../../components/StockOverview'
+import { isMachine, modelLabel } from '../../lib/modelLabel'
 
 type Filter = 'all' | MachineStatus
 type Sort = 'model' | 'in_stock' | 'waiting'
@@ -118,9 +119,11 @@ export function MachinesPage() {
   }
 
   const totals = useMemo(() => {
-    const ms = data?.machines ?? []
+    // Counts are for machines only, not accessories.
+    const machineIds = new Set((data?.models ?? []).filter(isMachine).map((m) => m.id))
+    const ms = (data?.machines ?? []).filter((m) => machineIds.has(m.model_id))
     return {
-      all: data?.models.length ?? 0,
+      all: machineIds.size,
       in_stock: ms.filter((m) => m.status === 'in_stock').length,
       en_route: ms.filter((m) => m.status === 'en_route').length,
       sold: ms.filter((m) => m.status === 'sold').length,
@@ -186,7 +189,7 @@ export function MachinesPage() {
         const counts = new Map<string, number>()
         for (const m of machines) {
           const model = data.models.find((x) => x.id === m.model_id)
-          const label = `${model?.model_number ?? '?'}${m.size ? ` ${m.size}` : ''}`
+          const label = modelLabel(model, data.models, m.size)
           counts.set(label, (counts.get(label) ?? 0) + 1)
         }
         const etas = machines.map((m) => m.eta).filter(Boolean).sort() as string[]
@@ -210,7 +213,7 @@ export function MachinesPage() {
                 <button onClick={() => toggle(r.model.id)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-left">
                   <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="font-semibold">{r.model.model_number}</span>
+                    <span className="font-semibold">{modelLabel(r.model, data?.models ?? [])}</span>
                     {r.model.name && <span className="ml-2 text-slate-500 dark:text-slate-400">{r.model.name}</span>}
                     {r.model.kind === 'accessory' && (r.model.fits_models ?? []).length > 0 && (
                       <span className="ml-2 text-xs text-slate-400">
@@ -260,7 +263,7 @@ export function MachinesPage() {
                         hasSizes={r.model.sizes.length > 0}
                         isManager={isManager}
                         onEdit={(m) => setMachineForm({ machine: m })}
-                        onHistory={(m) => setHistory({ machine: m, title: `${r.model.model_number}${m.size ? ` ${m.size}` : ''}` })}
+                        onHistory={(m) => setHistory({ machine: m, title: modelLabel(r.model, data?.models ?? [], m.size) })}
                         onArrived={(m) => setStatus(m, 'in_stock')}
                         onSold={(m) => setStatus(m, 'sold')}
                         onDelete={(m) => askDeleteMachine(m, r.model.model_number)}

@@ -7,6 +7,7 @@ import { personName, useProfiles } from '../../lib/useProfiles'
 import type { Model, WaitlistEntry } from '../../lib/types'
 import { Button, Confirm, Empty, ErrorText, Loading, Toast, fmtDate, inputClass } from '../../components/ui'
 import { WaitlistForm } from './WaitlistForm'
+import { modelLabel } from '../../lib/modelLabel'
 
 type Show = 'waiting' | 'contacted' | 'all'
 
@@ -49,7 +50,7 @@ export function WaitlistPage() {
     const stock = new Map<string, number>()
     for (const m of data.inStock) stock.set(m.model_id, (stock.get(m.model_id) ?? 0) + 1)
 
-    const modelText = new Map(data.models.map((m) => [m.id, `${m.model_number} ${m.name ?? ''}`.toLowerCase()]))
+    const modelText = new Map(data.models.map((m) => [m.id, `${modelLabel(m, data.models)} ${m.name ?? ''}`.toLowerCase()]))
     const entries = data.entries.filter(
       (e) =>
         (show === 'all' || (show === 'waiting' ? !e.contacted : e.contacted)) &&
@@ -113,7 +114,7 @@ export function WaitlistPage() {
 
       {filteredModel && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm dark:bg-slate-800">
-          Showing only <strong>{filteredModel.model_number}</strong>
+          Showing only <strong>{modelLabel(filteredModel, data?.models ?? [])}</strong>
           <button
             className="ml-auto font-medium text-brand-700 underline dark:text-brand-500"
             onClick={() => {
@@ -166,7 +167,7 @@ export function WaitlistPage() {
             <section key={g.model.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <header className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
                 <Link to={`/machines?model=${g.model.id}`} className="font-semibold hover:underline">
-                  {g.model.model_number}
+                  {modelLabel(g.model, data?.models ?? [])}
                 </Link>
                 {g.model.name && <span className="text-slate-500 dark:text-slate-400">{g.model.name}</span>}
                 {g.inStock > 0 && (

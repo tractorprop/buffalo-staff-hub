@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { Model } from '../lib/types'
 import { inputClass } from './ui'
+import { modelLabel } from '../lib/modelLabel'
 
 // Type-to-search dropdown for choosing a model.
 export function ModelPicker({
@@ -22,11 +23,14 @@ export function ModelPicker({
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
     return models
-      .filter((m) => !q || m.model_number.toLowerCase().includes(q) || (m.name ?? '').toLowerCase().includes(q))
+      .filter((m) => {
+        const text = `${modelLabel(m, models)} ${m.name ?? ''}`.toLowerCase()
+        return !q || q.split(/\s+/).every((w) => text.includes(w))
+      })
       .slice(0, 50)
   }, [models, query])
 
-  const label = (m: Model) => (m.name ? `${m.model_number} · ${m.name}` : m.model_number)
+  const label = (m: Model) => (m.name ? `${modelLabel(m, models)} · ${m.name}` : modelLabel(m, models))
 
   return (
     <div

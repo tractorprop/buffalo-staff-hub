@@ -4,6 +4,7 @@ import { personName } from './useProfiles'
 import type { CalendarEvent, Holiday, Machine, Model, Profile } from './types'
 import type { CalItem } from '../components/MonthCalendar'
 import { today } from '../components/ui'
+import { labelFor } from './modelLabel'
 
 export interface Container {
   ref: string
@@ -28,7 +29,7 @@ export async function loadCalendar() {
     supabase!.from('holidays').select('*').gte('end_date', since).order('start_date'),
     supabase!.from('events').select('*').gte('end_date', since).order('start_date'),
     supabase!.from('machines').select('model_id, size, container_ref, eta').eq('status', 'en_route'),
-    supabase!.from('models').select('id, model_number'),
+    supabase!.from('models').select('*'),
   ])
   const error = holidays.error ?? enRoute.error ?? models.error
   if (error) return { data: null, error }
@@ -43,7 +44,7 @@ export async function loadCalendar() {
   }
 }
 
-export function groupContainers(enRoute: Pick<Machine, 'model_id' | 'size' | 'container_ref' | 'eta'>[], models: Pick<Model, 'id' | 'model_number'>[]): Container[] {
+export function groupContainers(enRoute: Pick<Machine, 'model_id' | 'size' | 'container_ref' | 'eta'>[], models: Model[]): Container[] {
   const byRef = new Map<string, typeof enRoute>()
   for (const m of enRoute) {
     if (!m.container_ref) continue
@@ -53,7 +54,7 @@ export function groupContainers(enRoute: Pick<Machine, 'model_id' | 'size' | 'co
     .map(([ref, ms]) => {
       const counts = new Map<string, number>()
       for (const m of ms) {
-        const label = `${models.find((x) => x.id === m.model_id)?.model_number ?? '?'}${m.size ? ` ${m.size}` : ''}`
+        const label = labelFor(m.model_id, models, m.size)
         counts.set(label, (counts.get(label) ?? 0) + 1)
       }
       const etas = ms.map((m) => m.eta).filter(Boolean).sort() as string[]

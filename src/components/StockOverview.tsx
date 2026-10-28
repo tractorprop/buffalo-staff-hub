@@ -4,6 +4,7 @@ import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
 import type { Machine, Model } from '../lib/types'
 import { fmtDate, today } from './ui'
+import { isMachine, modelLabel } from '../lib/modelLabel'
 
 export const linkClass = 'font-medium text-sky-700 underline dark:text-sky-300'
 
@@ -53,14 +54,17 @@ export function StockOverview({
       if (m.status === 'in_stock') inStockBy.set(m.model_id, (inStockBy.get(m.model_id) ?? 0) + 1)
       if (m.status === 'en_route') enRouteBy.set(m.model_id, (enRouteBy.get(m.model_id) ?? 0) + 1)
     }
+    const machineIds = new Set(models.filter(isMachine).map((m) => m.id))
+    const onlyMachines = machines.filter((m) => machineIds.has(m.model_id))
     const containers = groupContainers(
       machines.filter((m) => m.status === 'en_route'),
       models,
     )
     return {
-      inStock: machines.filter((m) => m.status === 'in_stock').length,
-      enRoute: machines.filter((m) => m.status === 'en_route').length,
-      soldThisMonth: machines.filter((m) => m.status === 'sold' && m.sold_date?.startsWith(now.slice(0, 7))).length,
+      // Totals count machines only, not accessories.
+      inStock: onlyMachines.filter((m) => m.status === 'in_stock').length,
+      enRoute: onlyMachines.filter((m) => m.status === 'en_route').length,
+      soldThisMonth: onlyMachines.filter((m) => m.status === 'sold' && m.sold_date?.startsWith(now.slice(0, 7))).length,
       levelsSet: models.some((m) => m.reorder_level != null),
       levelsMissing: models.length > 0 && models.every((m) => m.reorder_level === undefined),
       lowStock: models
@@ -97,7 +101,7 @@ export function StockOverview({
               {d.lowStock.map((l) => (
                 <li key={l.model.id} className="flex flex-wrap items-center gap-x-3 py-1.5">
                   <button onClick={() => onModel(l.model.id)} className="font-semibold hover:underline">
-                    {l.model.model_number}
+                    {modelLabel(l.model, models)}
                   </button>
                   {l.model.name && <span className="text-slate-500">{l.model.name}</span>}
                   <span className="ml-auto">
