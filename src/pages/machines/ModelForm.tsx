@@ -8,6 +8,7 @@ export function ModelForm({ model, onClose }: { model?: Model; onClose: () => vo
   const [name, setName] = useState(model?.name ?? '')
   const [sizes, setSizes] = useState((model?.sizes ?? []).join(', '))
   const [notes, setNotes] = useState(model?.notes ?? '')
+  const [reorder, setReorder] = useState(model?.reorder_level != null ? String(model.reorder_level) : '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -17,18 +18,26 @@ export function ModelForm({ model, onClose }: { model?: Model; onClose: () => vo
     setBusy(true)
     setError('')
     const sizeList = [...new Set(sizes.split(',').map((s) => s.trim()).filter(Boolean))]
-    const row = {
+    const row: Record<string, unknown> = {
       model_number: modelNumber.trim(),
       name: name.trim() || null,
       sizes: sizeList,
       notes: notes.trim() || null,
     }
+    // Only send the low-stock level once the database has that column (or one was typed).
+    if (reorder !== '' || model?.reorder_level !== undefined) row.reorder_level = reorder === '' ? null : Math.max(0, parseInt(reorder) || 0)
     const { error } = model
       ? await supabase.from('models').update(row).eq('id', model.id)
       : await supabase.from('models').insert(row)
     setBusy(false)
     if (error) {
-      setError(error.code === '23505' ? `Model number "${row.model_number}" already exists.` : friendlyError(error))
+      setError(
+        error.code === '23505'
+          ? `Model number "${row.model_number}" already exists.`
+          : /reorder_level/.test(error.message)
+            ? 'Low stock levels are not switched on yet. Run database/03-calendar-and-low-stock.sql in Supabase first.'
+            : friendlyError(error),
+      )
       return
     }
     onClose()
@@ -45,6 +54,9 @@ export function ModelForm({ model, onClose }: { model?: Model; onClose: () => vo
         </Field>
         <Field label="Sizes" hint="Separate with commas, e.g. Small, Medium, Large. Leave empty if this model comes in one size.">
           <input className={inputClass} value={sizes} onChange={(e) => setSizes(e.target.value)} />
+        </Field>
+        <Field label="Low stock level" hint="The dashboard warns when the number in stock is at or below this. Leave empty for no warning.">
+          <input type="number" min={0} inputMode="numeric" className={inputClass} value={reorder} onChange={(e) => setReorder(e.target.value)} />
         </Field>
         <Field label="Notes">
           <textarea className={inputClass} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />

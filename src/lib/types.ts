@@ -13,6 +13,7 @@ export interface Model {
   name: string | null
   sizes: string[]
   notes: string | null
+  reorder_level?: number | null // low-stock level; missing until 03-calendar-and-low-stock.sql is run
   created_at: string
 }
 
@@ -95,4 +96,14 @@ export interface ModelStockSummary {
   en_route: number
   sold: number
   waiting: number
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  start_date: string
+  end_date: string
+  note: string | null
+  created_by: string | null
+  created_at: string
 }

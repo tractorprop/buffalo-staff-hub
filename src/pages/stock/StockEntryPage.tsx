@@ -25,8 +25,8 @@ interface Data {
   log: AuditEntry[]
 }
 
-async function loadAll() {
-  const since = new Date(Date.now() - 14 * 864e5).toISOString()
+async function loadAll(days: number) {
+  const since = new Date(Date.now() - days * 864e5).toISOString()
   const [models, inStock, log] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
     supabase!.from('machines').select('model_id, size').eq('status', 'in_stock'),
@@ -36,7 +36,7 @@ async function loadAll() {
       .eq('table_name', 'machines')
       .gte('changed_at', since)
       .order('changed_at', { ascending: false })
-      .limit(1000),
+      .limit(5000),
   ])
   const error = models.error ?? inStock.error ?? log.error
   return {
@@ -63,12 +63,15 @@ function movements(log: AuditEntry[]) {
     g.qty += sign
     groups.set(key, g)
   }
-  return [...groups.values()].slice(0, 50)
+  return [...groups.values()]
 }
 
 export function StockEntryPage() {
   const profiles = useProfiles()
-  const { data, error, loading, reload } = useLive<Data>(['models', 'machines'], loadAll)
+  const [days, setDays] = useState(30)
+  const [person, setPerson] = useState('')
+  const [modelSearch, setModelSearch] = useState('')
+  const { data, error, loading, reload } = useLive<Data>(['models', 'machines'], () => loadAll(days), [days])
   const [lines, setLines] = useState<Line[]>([newLine()])
   const [formError, setFormError] = useState('')
   const [done, setDone] = useState('')
@@ -124,6 +127,16 @@ export function StockEntryPage() {
     if (problems.length) setFormError([...new Set(problems)].join(' '))
     reload()
   }
+
+  const history = useMemo(() => {
+    const q = modelSearch.trim().toLowerCase()
+    return movements(data?.log ?? []).filter((g) => {
+      if (person && g.by !== person) return false
+      if (!q) return true
+      const m = data?.models.find((x) => x.id === g.modelId)
+      return `${m?.model_number ?? ''} ${m?.name ?? ''} ${g.size ?? ''}`.toLowerCase().includes(q)
+    })
+  }, [data, person, modelSearch])
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -220,25 +233,55 @@ export function StockEntryPage() {
       )}
 
       {data && (
-        <section>
-          <h2 className="mb-2 font-semibold">Recent stock entries (last 14 days)</h2>
-          {movements(data.log).length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">No stock entries yet.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white text-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-              {movements(data.log).map((g) => (
-                <li key={`${g.at}${g.modelId}${g.size}${g.qty}`} className="flex flex-wrap items-center gap-x-3 px-4 py-2">
-                  <span className={`w-10 font-bold ${g.qty < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
-                    {g.qty < 0 ? `−${-g.qty}` : `+${g.qty}`}
-                  </span>
-                  <span className="font-medium">{modelLabel(g.modelId, g.size)}</span>
-                  <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-                    {personName(profiles, g.by)} · {fmtDateTime(g.at)}
-                  </span>
-                </li>
+        <section className="space-y-2">
+          <h2 className="font-semibold">Stock entry history</h2>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select className={`${inputClass} sm:w-56`} value={person} onChange={(e) => setPerson(e.target.value)}>
+              <option value="">Everyone</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.email}
+                </option>
               ))}
-            </ul>
+            </select>
+            <input className={inputClass} placeholder="Filter by model…" value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} />
+          </div>
+          {history.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No stock entries in the last {days} days{person || modelSearch ? ' matching these filters' : ''}.</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-sm dark:border-slate-800 dark:bg-slate-900">
+              <table className="w-full">
+                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">When</th>
+                    <th className="px-3 py-2">Who</th>
+                    <th className="px-3 py-2">Entry</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {history.map((g) => (
+                    <tr key={`${g.at}${g.modelId}${g.size}${g.qty}`}>
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{fmtDateTime(g.at)}</td>
+                      <td className="px-3 py-2">{personName(profiles, g.by)}</td>
+                      <td className="px-3 py-2">
+                        <span className={`mr-2 font-bold ${g.qty < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                          {g.qty < 0 ? `−${-g.qty}` : `+${g.qty}`}
+                        </span>
+                        <span className="font-medium">{modelLabel(g.modelId, g.size)}</span>
+                        <span className="ml-1 text-xs text-slate-500">{g.qty < 0 ? 'left (sold)' : 'returned'}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
+          <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+            Showing the last {days} days.
+            <Button size="sm" onClick={() => setDays((n) => n + 90)}>
+              Load older
+            </Button>
+          </div>
         </section>
       )}
     </div>

@@ -2,10 +2,12 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
-import { ComingSoon } from './pages/ComingSoon'
 import { MachinesPage } from './pages/machines/MachinesPage'
 import { WaitlistPage } from './pages/waitlist/WaitlistPage'
 import { StockEntryPage } from './pages/stock/StockEntryPage'
+import { TasksPage } from './pages/tasks/TasksPage'
+import { CalendarPage } from './pages/calendar/CalendarPage'
+import { DashboardPage } from './pages/DashboardPage'
 
 function Gate() {
   const { session, profile, loading, signOut } = useAuth()
@@ -37,13 +39,14 @@ function Gate() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<ComingSoon title="Dashboard" />} />
+        <Route index element={<DashboardPage />} />
         <Route path="models" element={<Navigate to="/machines" replace />} />
         <Route path="machines" element={<MachinesPage />} />
         <Route path="stock" element={<StockEntryPage />} />
         <Route path="waitlist" element={<WaitlistPage />} />
-        <Route path="tasks" element={<ComingSoon title="Tasks" />} />
-        <Route path="holidays" element={<ComingSoon title="Holidays" />} />
+        <Route path="tasks" element={<TasksPage />} />
+        <Route path="calendar" element={<CalendarPage />} />
+        <Route path="holidays" element={<Navigate to="/calendar" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
