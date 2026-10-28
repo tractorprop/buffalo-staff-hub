@@ -11,6 +11,7 @@ import {
   Empty,
   ErrorText,
   Loading,
+  Modal,
   StatusBadge,
   Toast,
   fmtDate,
@@ -58,6 +59,7 @@ export function MachinesPage() {
   const [modelForm, setModelForm] = useState<{ model?: Model } | null>(null)
   const [machineForm, setMachineForm] = useState<{ machine?: Machine; modelId?: string } | null>(null)
   const [containerForm, setContainerForm] = useState(false)
+  const [showContainers, setShowContainers] = useState(false)
   const [history, setHistory] = useState<{ machine: Machine; title: string } | null>(null)
   const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel?: string; run: () => Promise<void> } | null>(null)
   const [toast, setToast] = useState('')
@@ -205,44 +207,40 @@ export function MachinesPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">Machines</h1>
-        {isManager && (
-          <div className="ml-auto flex gap-2">
-            <Button onClick={() => setModelForm({})}>+ Add model</Button>
-            <Button onClick={() => setMachineForm({})} disabled={!data?.models.length}>
-              + Add machine
-            </Button>
-            <Button variant="primary" onClick={() => setContainerForm(true)} disabled={!data?.models.length}>
-              + Add container
-            </Button>
-          </div>
-        )}
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Link
+            to="/stock"
+            className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+          >
+            ± Stock entry
+          </Link>
+          <Button onClick={() => setModelForm({})} disabled={!isManager} title={isManager ? undefined : 'Managers only'}>
+            + Add model
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => setContainerForm(true)}
+            disabled={!isManager || !data?.models.length}
+            title={isManager ? undefined : 'Managers only'}
+          >
+            + Add container
+          </Button>
+        </div>
       </div>
 
       {containers.length > 0 && (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
-          <h2 className="mb-2 font-semibold">Containers on the way</h2>
-          <ul className="space-y-2">
-            {containers.map((c) => (
-              <li key={c.ref} className="flex flex-col gap-2 rounded-lg bg-white p-3 text-sm sm:flex-row sm:items-center dark:bg-slate-900">
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium">
-                    {c.ref}
-                    <span className="ml-2 font-normal text-slate-500">
-                      {c.total} machine{c.total === 1 ? '' : 's'}
-                      {c.eta && ` · ETA ${fmtDate(c.eta)}`}
-                    </span>
-                  </div>
-                  <div className="text-slate-600 dark:text-slate-300">{c.contents.map(([label, n]) => `${n}× ${label}`).join(', ')}</div>
-                </div>
-                {isManager && (
-                  <Button size="sm" variant="primary" onClick={() => askContainerArrived(c.ref, c.total)}>
-                    Mark container arrived
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
+        <button
+          onClick={() => setShowContainers(true)}
+          className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-950/60"
+        >
+          <span className="font-semibold">🚢 Containers on the way</span>
+          <span>
+            <strong>{containers.length}</strong> container{containers.length === 1 ? '' : 's'} ·{' '}
+            <strong>{containers.reduce((n, c) => n + c.total, 0)}</strong> machines
+          </span>
+          {containers[0].eta && <span className="text-slate-600 dark:text-slate-300">Next ETA {fmtDate(containers[0].eta)}</span>}
+          <span className="ml-auto font-medium text-amber-800 underline dark:text-amber-300">View all →</span>
+        </button>
       )}
 
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
@@ -286,7 +284,7 @@ export function MachinesPage() {
         <Loading />
       ) : !data?.models.length ? (
         <Empty title="No models yet">
-          {isManager ? 'Click "+ Add model" to add the first model you sell.' : 'A manager needs to add the models you sell.'}
+          {isManager ? 'Click "+ Add model" to add each model you sell, then "+ Add container" to add stock.' : 'A manager needs to add the models you sell.'}
         </Empty>
       ) : rows.length === 0 ? (
         <Empty title="Nothing matches">Try a different search or tab.</Empty>
@@ -320,9 +318,6 @@ export function MachinesPage() {
 
                     {isManager && (
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="primary" onClick={() => setMachineForm({ modelId: r.model.id })}>
-                          + Add {r.model.model_number}
-                        </Button>
                         <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
                           Edit model
                         </Button>
@@ -395,6 +390,35 @@ export function MachinesPage() {
           defaultModelId={machineForm.modelId}
           onClose={() => setMachineForm(null)}
         />
+      )}
+      {showContainers && (
+        <Modal title="Containers on the way" onClose={() => setShowContainers(false)} wide>
+          {containers.length === 0 ? (
+            <p className="text-sm text-slate-500">No containers on the way.</p>
+          ) : (
+            <ul className="space-y-2">
+              {containers.map((c) => (
+                <li key={c.ref} className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-sm sm:flex-row sm:items-center dark:border-slate-800">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">
+                      {c.ref}
+                      <span className="ml-2 font-normal text-slate-500">
+                        {c.total} machine{c.total === 1 ? '' : 's'}
+                        {c.eta && ` · ETA ${fmtDate(c.eta)}`}
+                      </span>
+                    </div>
+                    <div className="text-slate-600 dark:text-slate-300">{c.contents.map(([label, n]) => `${n}× ${label}`).join(', ')}</div>
+                  </div>
+                  {isManager && (
+                    <Button size="sm" variant="primary" onClick={() => askContainerArrived(c.ref, c.total)}>
+                      Mark container arrived
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
       )}
       {containerForm && data && <ContainerForm models={data.models} onClose={() => setContainerForm(false)} />}
       {history && data && (

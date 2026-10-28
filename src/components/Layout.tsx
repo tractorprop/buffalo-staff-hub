@@ -7,6 +7,7 @@ import { applyTheme, currentTheme, type Theme } from './theme'
 const links = [
   { to: '/', label: 'Dashboard' },
   { to: '/machines', label: 'Machines' },
+  { to: '/stock', label: 'Stock entry' },
   { to: '/waitlist', label: 'Waiting list' },
   { to: '/tasks', label: 'Tasks' },
   { to: '/holidays', label: 'Holidays' },

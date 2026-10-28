@@ -5,6 +5,7 @@ import { Login } from './pages/Login'
 import { ComingSoon } from './pages/ComingSoon'
 import { MachinesPage } from './pages/machines/MachinesPage'
 import { WaitlistPage } from './pages/waitlist/WaitlistPage'
+import { StockEntryPage } from './pages/stock/StockEntryPage'
 
 function Gate() {
   const { session, profile, loading, signOut } = useAuth()
@@ -39,6 +40,7 @@ function Gate() {
         <Route index element={<ComingSoon title="Dashboard" />} />
         <Route path="models" element={<Navigate to="/machines" replace />} />
         <Route path="machines" element={<MachinesPage />} />
+        <Route path="stock" element={<StockEntryPage />} />
         <Route path="waitlist" element={<WaitlistPage />} />
         <Route path="tasks" element={<ComingSoon title="Tasks" />} />
         <Route path="holidays" element={<ComingSoon title="Holidays" />} />
