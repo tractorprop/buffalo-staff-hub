@@ -49,11 +49,14 @@ export function WaitlistPage() {
     const stock = new Map<string, number>()
     for (const m of data.inStock) stock.set(m.model_id, (stock.get(m.model_id) ?? 0) + 1)
 
+    const modelText = new Map(data.models.map((m) => [m.id, `${m.model_number} ${m.name ?? ''}`.toLowerCase()]))
     const entries = data.entries.filter(
       (e) =>
         (show === 'all' || (show === 'waiting' ? !e.contacted : e.contacted)) &&
         (!modelFilter || e.model_id === modelFilter) &&
-        (!q || [e.customer_name, e.phone, e.email, e.notes].some((v) => (v ?? '').toLowerCase().includes(q))),
+        (!q ||
+          (modelText.get(e.model_id) ?? '').includes(q) ||
+          [e.customer_name, e.phone, e.email, e.notes, e.size_wanted].some((v) => (v ?? '').toLowerCase().includes(q))),
     )
     return data.models
       .map((model) => ({
@@ -144,7 +147,7 @@ export function WaitlistPage() {
             </button>
           ))}
         </div>
-        <input className={inputClass} placeholder="Search name, phone, email, notes…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className={inputClass} placeholder="Search model (e.g. X digger), customer name, phone, email…" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       <ErrorText>{error}</ErrorText>

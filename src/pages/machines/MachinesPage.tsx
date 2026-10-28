@@ -20,6 +20,7 @@ import {
 import { ModelForm } from './ModelForm'
 import { MachineForm } from './MachineForm'
 import { History } from './History'
+import { ContainerForm } from './ContainerForm'
 
 type Filter = 'all' | MachineStatus
 type Sort = 'model' | 'in_stock' | 'waiting'
@@ -56,8 +57,9 @@ export function MachinesPage() {
 
   const [modelForm, setModelForm] = useState<{ model?: Model } | null>(null)
   const [machineForm, setMachineForm] = useState<{ machine?: Machine; modelId?: string } | null>(null)
+  const [containerForm, setContainerForm] = useState(false)
   const [history, setHistory] = useState<{ machine: Machine; title: string } | null>(null)
-  const [confirm, setConfirm] = useState<{ title: string; message: string; run: () => Promise<void> } | null>(null)
+  const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel?: string; run: () => Promise<void> } | null>(null)
   const [toast, setToast] = useState('')
 
   const rows = useMemo(() => {
@@ -153,6 +155,45 @@ export function MachinesPage() {
     })
   }
 
+  // Containers on the way: en-route machines grouped by container reference.
+  const containers = useMemo(() => {
+    if (!data) return []
+    const byRef = new Map<string, Machine[]>()
+    for (const m of data.machines) {
+      if (m.status !== 'en_route' || !m.container_ref) continue
+      byRef.set(m.container_ref, [...(byRef.get(m.container_ref) ?? []), m])
+    }
+    return [...byRef.entries()]
+      .map(([ref, machines]) => {
+        const counts = new Map<string, number>()
+        for (const m of machines) {
+          const model = data.models.find((x) => x.id === m.model_id)
+          const label = `${model?.model_number ?? '?'}${m.size ? ` ${m.size}` : ''}`
+          counts.set(label, (counts.get(label) ?? 0) + 1)
+        }
+        const etas = machines.map((m) => m.eta).filter(Boolean).sort() as string[]
+        return { ref, eta: etas[0] ?? null, total: machines.length, contents: [...counts.entries()] }
+      })
+      .sort((a, b) => (a.eta ?? '9999').localeCompare(b.eta ?? '9999'))
+  }, [data])
+
+  function askContainerArrived(ref: string, total: number) {
+    setConfirm({
+      title: `Container ${ref} arrived?`,
+      message: `All ${total} machine${total === 1 ? '' : 's'} in this container will be marked as In stock. Customers waiting for these models will get a "call" task automatically.`,
+      confirmLabel: 'Mark arrived',
+      run: async () => {
+        const { error } = await supabase!
+          .from('machines')
+          .update({ status: 'in_stock' })
+          .eq('container_ref', ref)
+          .eq('status', 'en_route')
+        if (error) setToast(friendlyError(error))
+        setConfirm(null)
+      },
+    })
+  }
+
   const tabs: { key: Filter; label: string; n: number }[] = [
     { key: 'all', label: 'All models', n: totals.all },
     { key: 'in_stock', label: 'In stock', n: totals.in_stock },
@@ -167,12 +208,42 @@ export function MachinesPage() {
         {isManager && (
           <div className="ml-auto flex gap-2">
             <Button onClick={() => setModelForm({})}>+ Add model</Button>
-            <Button variant="primary" onClick={() => setMachineForm({})} disabled={!data?.models.length}>
+            <Button onClick={() => setMachineForm({})} disabled={!data?.models.length}>
               + Add machine
+            </Button>
+            <Button variant="primary" onClick={() => setContainerForm(true)} disabled={!data?.models.length}>
+              + Add container
             </Button>
           </div>
         )}
       </div>
+
+      {containers.length > 0 && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <h2 className="mb-2 font-semibold">Containers on the way</h2>
+          <ul className="space-y-2">
+            {containers.map((c) => (
+              <li key={c.ref} className="flex flex-col gap-2 rounded-lg bg-white p-3 text-sm sm:flex-row sm:items-center dark:bg-slate-900">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">
+                    {c.ref}
+                    <span className="ml-2 font-normal text-slate-500">
+                      {c.total} machine{c.total === 1 ? '' : 's'}
+                      {c.eta && ` · ETA ${fmtDate(c.eta)}`}
+                    </span>
+                  </div>
+                  <div className="text-slate-600 dark:text-slate-300">{c.contents.map(([label, n]) => `${n}× ${label}`).join(', ')}</div>
+                </div>
+                {isManager && (
+                  <Button size="sm" variant="primary" onClick={() => askContainerArrived(c.ref, c.total)}>
+                    Mark container arrived
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
         {tabs.map((t) => (
@@ -325,10 +396,11 @@ export function MachinesPage() {
           onClose={() => setMachineForm(null)}
         />
       )}
+      {containerForm && data && <ContainerForm models={data.models} onClose={() => setContainerForm(false)} />}
       {history && data && (
         <History machineId={history.machine.id} title={history.title} models={data.models} onClose={() => setHistory(null)} />
       )}
-      {confirm && <Confirm title={confirm.title} message={confirm.message} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
+      {confirm && <Confirm title={confirm.title} message={confirm.message} confirmLabel={confirm.confirmLabel} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
     </div>
   )
