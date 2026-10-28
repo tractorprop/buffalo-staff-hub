@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   build:
+    # Skipped while the repository is private (free GitHub Pages needs a public repository).
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
