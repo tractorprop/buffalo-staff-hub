@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { useAuth } from '../../auth/AuthProvider'
-import { accessoryBaseName, isMachine, modelLabel } from '../../lib/modelLabel'
+import { isMachine, modelLabel } from '../../lib/modelLabel'
 import { money, priceOf, round2 } from '../../lib/money'
 import type { Model } from '../../lib/types'
 import { Button, ErrorText, inputClass } from '../../components/ui'
@@ -26,32 +26,6 @@ export function PriceList({ models }: { models: Model[] }) {
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
   const [busy, setBusy] = useState(false)
-  const [linked, setLinked] = useState(true) // same price for matching accessories on other machines
-
-  // Accessories with the same part name on different machines, e.g. "Hydraulic thumb" for B1000, B1200 and B1800.
-  const siblings = useMemo(() => {
-    const groups = new Map<string, Model[]>()
-    for (const m of models) {
-      if (m.kind !== 'accessory') continue
-      const k = accessoryBaseName(m, models).trim().toLowerCase()
-      groups.set(k, [...(groups.get(k) ?? []), m])
-    }
-    const out = new Map<string, Model[]>()
-    for (const list of groups.values()) if (list.length > 1) for (const m of list) out.set(m.id, list.filter((x) => x.id !== m.id))
-    return out
-  }, [models])
-
-  // Typing a price also fills in the same price (same size) on matching accessories when linked.
-  function setPrice(m: Model, size: string | null, value: string) {
-    setEdits((x) => {
-      const next = { ...x, [keyOf(m.id, size)]: value }
-      if (linked)
-        for (const s of siblings.get(m.id) ?? []) {
-          if (size ? s.sizes.includes(size) : !s.sizes.length) next[keyOf(s.id, size)] = value
-        }
-      return next
-    })
-  }
 
   // Machines first, then each machine's accessories underneath it; sized models get one row per size.
   const entries = useMemo(() => {
@@ -135,15 +109,6 @@ export function PriceList({ models }: { models: Model[] }) {
         Prices are <strong>including VAT</strong>, the same as your website. Items that come in sizes have a price for each size.{' '}
         {isManager ? 'Type a price in, then click Save.' : 'Only managers can change prices.'}
       </p>
-      {siblings.size > 0 && isManager && (
-        <label className="flex items-start gap-2 rounded-lg bg-brand-50 p-3 text-sm dark:bg-slate-800">
-          <input type="checkbox" className="mt-0.5 h-4 w-4" checked={linked} onChange={(e) => setLinked(e.target.checked)} />
-          <span>
-            <strong>Same price for matching accessories.</strong> Typing a price for e.g. "Hydraulic thumb B1000" also fills in the same price for
-            "Hydraulic thumb B1200" and any others with the same name. Untick if their prices differ.
-          </span>
-        </label>
-      )}
       <div className="flex flex-col gap-2 sm:flex-row">
         <input className={inputClass} placeholder="Search machine, accessory or size…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className={`${inputClass} sm:w-56`} value={show} onChange={(e) => setShow(e.target.value as Show)}>
@@ -191,11 +156,6 @@ export function PriceList({ models }: { models: Model[] }) {
                         {isMachine(m) ? '' : '🔧 '}
                         {modelLabel(m, models)}
                         {m.name && <span className="ml-2 font-normal text-slate-500">{m.name}</span>}
-                        {linked && isManager && siblings.has(m.id) && (
-                          <span className="block text-xs font-normal text-sky-700 dark:text-sky-300">
-                            🔗 also sets {siblings.get(m.id)!.map((s) => modelLabel(s, models)).join(', ')}
-                          </span>
-                        )}
                       </>
                     ) : (
                       <span className="invisible">{modelLabel(m, models)}</span>
@@ -216,7 +176,7 @@ export function PriceList({ models }: { models: Model[] }) {
                             edits[key] !== undefined ? 'border-brand-600' : current == null ? 'border-amber-400' : 'border-slate-300 dark:border-slate-700'
                           }`}
                           value={value}
-                          onChange={(e) => setPrice(m, size, e.target.value)}
+                          onChange={(e) => setEdits((x) => ({ ...x, [key]: e.target.value }))}
                         />
                       </span>
                     ) : current != null ? (
