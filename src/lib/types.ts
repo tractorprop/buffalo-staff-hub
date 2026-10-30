@@ -17,6 +17,7 @@ export interface Model {
   kind?: 'machine' | 'accessory' // missing until 04-accessories-and-task-rules.sql is run
   fits_models?: string[] // for accessories: the machine models it fits
   category?: 'Construction' | 'Forestry' | 'Agriculture' | null // missing until 05-categories.sql is run
+  price?: number | null // selling price excluding VAT; missing until 07-sales.sql is run
   created_at: string
 }
 
@@ -107,6 +108,40 @@ export interface CalendarEvent {
   start_date: string
   end_date: string
   note: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface CompanySettings {
+  company_name: string | null
+  address: string | null
+  phone: string | null
+  email: string | null
+  website: string | null
+  bank_name: string | null
+  account_number: string | null
+  sort_code: string | null
+  vat_number: string | null
+  company_number: string | null
+  terms: string | null
+}
+
+export interface InvoiceLine {
+  description: string
+  qty: number
+  unit_price: number // excluding VAT
+  vat_rate: number // 0.2 or 0
+}
+
+// Invoices never store customer details.
+export interface Invoice {
+  id: string
+  number: number
+  invoice_date: string
+  lines: InvoiceLine[]
+  subtotal: number
+  vat: number
+  total: number
   created_by: string | null
   created_at: string
 }
