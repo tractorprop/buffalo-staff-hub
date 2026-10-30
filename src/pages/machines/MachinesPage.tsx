@@ -11,7 +11,6 @@ import {
   Empty,
   ErrorText,
   Loading,
-  Modal,
   StatusBadge,
   Toast,
   fmtDate,
@@ -25,6 +24,7 @@ import { ContainerForm } from './ContainerForm'
 import { CheckInContainer } from './CheckInContainer'
 import { ArrivalHistory } from './ArrivalHistory'
 import { ReviewCheckin } from './ReviewCheckin'
+import { ContainersWindow } from './ContainersWindow'
 import { StockOverview } from '../../components/StockOverview'
 import { isMachine, modelLabel } from '../../lib/modelLabel'
 
@@ -75,7 +75,7 @@ export function MachinesPage() {
   const [modelForm, setModelForm] = useState<{ model?: Model; accessoryFor?: string } | null>(null)
   const [machineForm, setMachineForm] = useState<{ machine?: Machine; modelId?: string } | null>(null)
   const [containerForm, setContainerForm] = useState(false)
-  const [showContainers, setShowContainers] = useState(false)
+  const [showContainers, setShowContainers] = useState<string | null | false>(false) // false = closed, null = open on the first
   const [checkIn, setCheckIn] = useState<string | null>(null)
   const [history, setHistory] = useState<{ machine: Machine; title: string } | null>(null)
   const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel?: string; run: () => Promise<void> } | null>(null)
@@ -421,6 +421,7 @@ export function MachinesPage() {
             setParams(p, { replace: true })
           }}
           onModel={openModel}
+          onContainer={(ref) => setShowContainers(ref)}
         />
       )}
 
@@ -441,16 +442,19 @@ export function MachinesPage() {
 
       {containers.length > 0 && (
         <button
-          onClick={() => setShowContainers(true)}
-          className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-950/60"
+          onClick={() => setShowContainers(null)}
+          className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border-2 border-ink bg-brand-500 px-5 py-4 text-left text-ink shadow-md hover:bg-brand-400 dark:border-brand-500"
         >
-          <span className="font-semibold">🚢 Containers on the way</span>
+          <span className="text-3xl">🚢</span>
           <span>
-            <strong>{containers.length}</strong> container{containers.length === 1 ? '' : 's'} ·{' '}
-            <strong>{containers.reduce((n, c) => n + c.total, 0)}</strong> machines
+            <span className="block text-lg font-bold">Containers on the way</span>
+            <span className="text-sm">
+              <strong>{containers.length}</strong> container{containers.length === 1 ? '' : 's'} · <strong>{containers.reduce((n, c) => n + c.total, 0)}</strong> items
+              {containers[0].eta && <> · next ETA {fmtDate(containers[0].eta)}</>}
+              {(data?.checkins.length ?? 0) > 0 && <> · ⏳ {data!.checkins.length} waiting for approval</>}
+            </span>
           </span>
-          {containers[0].eta && <span className="text-slate-600 dark:text-slate-300">Next ETA {fmtDate(containers[0].eta)}</span>}
-          <span className="ml-auto font-medium text-amber-800 underline dark:text-amber-300">View all →</span>
+          <span className="ml-auto rounded-xl bg-ink px-4 py-2 font-semibold text-brand-500">View & check in →</span>
         </button>
       )}
 
@@ -603,58 +607,22 @@ export function MachinesPage() {
           onClose={() => setMachineForm(null)}
         />
       )}
-      {showContainers && (
-        <Modal title="Containers on the way" onClose={() => setShowContainers(false)} wide>
-          {containers.length === 0 ? (
-            <p className="text-sm text-slate-500">No containers on the way.</p>
-          ) : (
-            <ul className="space-y-2">
-              {containers.map((c) => (
-                <li key={c.ref} className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 text-sm sm:flex-row sm:items-center dark:border-slate-800">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium">
-                      📦 {c.ref}
-                      <span className="ml-2 font-normal text-slate-500">
-                        {c.total} machine{c.total === 1 ? '' : 's'}
-                        {c.eta && ` · ETA ${fmtDate(c.eta)}`}
-                      </span>
-                    </div>
-                    <div className="text-slate-600 dark:text-slate-300">{c.contents.map(([label, n]) => `${n}× ${label}`).join(', ')}</div>
-                  </div>
-                  {pendingFor(c.ref) ? (
-                    isManager ? (
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => {
-                          setShowContainers(false)
-                          setReview(pendingFor(c.ref)!)
-                        }}
-                      >
-                        ⏳ Review & approve
-                      </Button>
-                    ) : (
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                        ⏳ Waiting for manager approval
-                      </span>
-                    )
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={() => {
-                        setShowContainers(false)
-                        setCheckIn(c.ref)
-                      }}
-                    >
-                      Check in container
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Modal>
+      {showContainers !== false && (
+        <ContainersWindow
+          containers={containers}
+          initial={showContainers}
+          pendingFor={pendingFor}
+          isManager={isManager}
+          onCheckIn={(ref) => {
+            setShowContainers(false)
+            setCheckIn(ref)
+          }}
+          onReview={(c) => {
+            setShowContainers(false)
+            setReview(c)
+          }}
+          onClose={() => setShowContainers(false)}
+        />
       )}
       {checkIn && data && (
         <CheckInContainer

@@ -51,7 +51,7 @@ export function Modal({
   title: string
   onClose: () => void
   children: ReactNode
-  wide?: boolean
+  wide?: boolean | 'xl'
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -63,7 +63,7 @@ export function Modal({
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
       <div
         className={`max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl dark:bg-slate-900 ${
-          wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'
+          wide === 'xl' ? 'sm:max-w-6xl' : wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'
         }`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"

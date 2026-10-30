@@ -1,5 +1,4 @@
 import { useMemo, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
 import type { Machine, Model } from '../lib/types'
@@ -40,11 +39,13 @@ export function StockOverview({
   machines,
   onStatus,
   onModel,
+  onContainer,
 }: {
   models: Model[]
   machines: Pick<Machine, 'model_id' | 'size' | 'status' | 'sold_date' | 'eta' | 'container_ref'>[]
   onStatus: (status: 'in_stock' | 'en_route' | 'sold') => void
   onModel: (modelId: string) => void
+  onContainer: (ref: string | null) => void // open the containers window (optionally on one container)
 }) {
   const now = today()
   const d = useMemo(() => {
@@ -121,7 +122,8 @@ export function StockOverview({
           ) : (
             <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
               {d.arriving.map((c) => (
-                <li key={c.ref} className="py-1.5">
+                <li key={c.ref}>
+                  <button onClick={() => onContainer(c.ref)} className="w-full rounded-lg px-2 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800">
                   <div className="flex flex-wrap gap-x-3">
                     <span className="font-semibold">📦 {c.ref}</span>
                     <span className={c.eta! < now ? 'font-semibold text-red-600' : 'text-slate-600 dark:text-slate-300'}>
@@ -130,14 +132,15 @@ export function StockOverview({
                     <span className="ml-auto text-slate-500">{c.total} items</span>
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">{c.contents.map(([l, n]) => `${n}× ${l}`).join(', ')}</div>
+                  </button>
                 </li>
               ))}
             </ul>
           )}
           {d.noEta > 0 && <p className="mt-2 text-xs text-slate-500">+ {d.noEta} container{d.noEta === 1 ? '' : 's'} with no ETA set.</p>}
-          <Link to="/" className={`mt-2 inline-block text-sm ${linkClass}`}>
-            See the timeline on the Dashboard
-          </Link>
+          <button onClick={() => onContainer(null)} className={`mt-2 inline-block text-sm ${linkClass}`}>
+            Open all containers →
+          </button>
         </Card>
       </div>
     </div>
