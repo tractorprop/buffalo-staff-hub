@@ -318,10 +318,72 @@ export function NewInvoice({ data }: { data: SalesData }) {
             <Button onClick={() => addCustom()}>+ Custom line</Button>
           </div>
         </section>
+
+        <section
+          className={`rounded-xl border-4 p-4 ${
+            deliveryValue === null ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10' : 'border-green-500 bg-white dark:bg-slate-900'
+          }`}
+        >
+          <h2 className="text-lg font-bold">
+            🚚 3. Delivery <span className="text-red-600">*</span>
+          </h2>
+          <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+            Required. Enter the delivery charge <strong>including VAT</strong>, or press <strong>Customer is collecting</strong> for £0.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="relative">
+              <span className="absolute left-3 top-2.5 text-lg font-semibold text-slate-400">£</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                aria-label="Delivery charge including VAT"
+                placeholder="0.00"
+                className="w-44 rounded-lg border-2 border-slate-400 bg-white py-2 pl-8 pr-3 text-lg font-bold dark:border-slate-600 dark:bg-slate-950"
+                value={delivery}
+                onChange={(e) => setDelivery(e.target.value)}
+              />
+            </span>
+            <Button onClick={() => setDelivery('0')}>🏠 Customer is collecting (£0)</Button>
+            {deliveryValue !== null && <span className="font-semibold text-green-700 dark:text-green-400">✓ Delivery {money(deliveryValue)}</span>}
+          </div>
+        </section>
+
+        <section className="rounded-xl border-2 border-slate-300 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <h2 className="text-lg font-bold">🏷️ 4. Discount</h2>
+          <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+            Optional. Enter the discount <strong>including VAT</strong>. Leave empty if there's no discount; the word "Discount" then won't appear on the invoice.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="relative">
+              <span className="absolute left-3 top-2.5 text-lg font-semibold text-slate-400">£</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                aria-label="Discount including VAT"
+                placeholder="0.00"
+                className="w-44 rounded-lg border-2 border-slate-300 bg-white py-2 pl-8 pr-3 text-lg font-bold dark:border-slate-600 dark:bg-slate-950"
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+              />
+            </span>
+            {discountValue > 0 && (
+              <>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">−{money(discountValue)} off the total</span>
+                <Button size="sm" variant="ghost" onClick={() => setDiscount('')}>
+                  Remove discount
+                </Button>
+              </>
+            )}
+          </div>
+        </section>
       </div>
 
       <section className="h-fit space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:sticky lg:top-24 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="font-semibold">3. Invoice</h2>
+        <h2 className="font-semibold">5. Invoice</h2>
         {lines.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">No items yet. Choose a machine and accessories, or add a custom line.</p>
         ) : (
@@ -378,37 +440,6 @@ export function NewInvoice({ data }: { data: SalesData }) {
             ))}
           </ul>
         )}
-        <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-          <Field label="Delivery (inc VAT) *" hint="0 for collection">
-            <span className="relative block">
-              <span className="absolute left-2.5 top-2 text-sm text-slate-400">£</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                inputMode="decimal"
-                className={`${inputClass} pl-6 ${deliveryValue === null ? 'border-amber-400' : ''}`}
-                value={delivery}
-                onChange={(e) => setDelivery(e.target.value)}
-              />
-            </span>
-          </Field>
-          <Field label="Discount (inc VAT)" hint="Not shown on the invoice if 0">
-            <span className="relative block">
-              <span className="absolute left-2.5 top-2 text-sm text-slate-400">£</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                inputMode="decimal"
-                placeholder="0"
-                className={`${inputClass} pl-6`}
-                value={discount}
-                onChange={(e) => setDiscount(e.target.value)}
-              />
-            </span>
-          </Field>
-        </div>
         <div className="space-y-1 border-t border-slate-200 pt-3 text-sm dark:border-slate-700">
           {deliveryValue !== null && (
             <div className="flex justify-between text-slate-500">
