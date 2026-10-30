@@ -30,6 +30,8 @@ export function NewInvoice({ data }: { data: SalesData }) {
   const [sizeFor, setSizeFor] = useState<Model | null>(null) // item from "find any item" that needs a size
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [delivery, setDelivery] = useState('') // required, inc VAT; 0 for collection
+  const [discount, setDiscount] = useState('') // optional, inc VAT; left off the invoice when 0
   const [done, setDone] = useState<Invoice | null>(null)
 
   const machines = useMemo(
@@ -82,13 +84,24 @@ export function NewInvoice({ data }: { data: SalesData }) {
   const addCustom = (description = '', price = 0) =>
     setLines((ls) => [...ls, { key: nextKey++, description, qty: 1, unit_price_inc: price, vat_rate: 0.2 }])
   const update = (key: number, change: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...change, noPrice: false } : l)))
-  const totals = invoiceTotals(lines)
+  // Delivery always goes on the invoice (even £0); a discount only when above 0.
+  // Both follow "No VAT" when every item on the invoice is No VAT (exports).
+  const extraRate = lines.length && lines.every((l) => l.vat_rate === 0) ? 0 : 0.2
+  const deliveryValue = delivery.trim() === '' ? null : Math.max(0, parseFloat(delivery) || 0)
+  const discountValue = Math.max(0, parseFloat(discount) || 0)
+  const extras: InvoiceLine[] = [
+    ...(deliveryValue !== null ? [{ description: 'Delivery', qty: 1, unit_price_inc: deliveryValue, vat_rate: extraRate }] : []),
+    ...(discountValue > 0 ? [{ description: 'Discount', qty: 1, unit_price_inc: -discountValue, vat_rate: extraRate }] : []),
+  ]
+  const totals = invoiceTotals([...lines, ...extras])
 
   async function create() {
     if (!supabase) return
     if (!customer.name.trim()) return setError('Enter the customer name.')
     if (!lines.length) return setError('Add at least one item.')
     if (lines.some((l) => !l.description.trim() || !(l.qty > 0))) return setError('Every line needs a description and a quantity above 0.')
+    if (deliveryValue === null) return setError('Enter the delivery charge. Type 0 if the customer is collecting.')
+    if (totals.total < 0) return setError('The discount is more than the invoice total.')
     if (!company?.prices_include_vat)
       return setError('Prices including VAT are not switched on yet. A manager needs to run database/09-prices-include-vat.sql in Supabase.')
     if (!company?.account_number || !company?.sort_code)
@@ -98,7 +111,10 @@ export function NewInvoice({ data }: { data: SalesData }) {
     const win = openInvoiceWindow()
     if (!win) return setError('Your browser blocked the invoice window. Allow pop-ups for this site and try again.')
     setBusy(true)
-    const clean: InvoiceLine[] = lines.map(({ description, qty, unit_price_inc, vat_rate }) => ({ description: description.trim(), qty, unit_price_inc, vat_rate }))
+    const clean: InvoiceLine[] = [
+      ...lines.map(({ description, qty, unit_price_inc, vat_rate }) => ({ description: description.trim(), qty, unit_price_inc, vat_rate })),
+      ...extras,
+    ]
     const { data: inv, error } = await supabase
       .from('invoices')
       .insert({ invoice_date: date, lines: clean, ...totals })
@@ -116,6 +132,8 @@ export function NewInvoice({ data }: { data: SalesData }) {
   function startAgain() {
     setCustomer(emptyCustomer)
     setLines([])
+    setDelivery('')
+    setDiscount('')
     setDate(today())
     setDone(null)
     setMachineId('')
@@ -297,7 +315,6 @@ export function NewInvoice({ data }: { data: SalesData }) {
                 </div>
               )}
             </div>
-            <Button onClick={() => addCustom('Delivery')}>+ Delivery</Button>
             <Button onClick={() => addCustom()}>+ Custom line</Button>
           </div>
         </section>
@@ -306,7 +323,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
       <section className="h-fit space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:sticky lg:top-24 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="font-semibold">3. Invoice</h2>
         {lines.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">No items yet. Choose a machine and accessories, or add Delivery / a custom line.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">No items yet. Choose a machine and accessories, or add a custom line.</p>
         ) : (
           <ul className="space-y-2">
             {lines.map((l) => (
@@ -361,7 +378,50 @@ export function NewInvoice({ data }: { data: SalesData }) {
             ))}
           </ul>
         )}
+        <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+          <Field label="Delivery (inc VAT) *" hint="0 for collection">
+            <span className="relative block">
+              <span className="absolute left-2.5 top-2 text-sm text-slate-400">£</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                className={`${inputClass} pl-6 ${deliveryValue === null ? 'border-amber-400' : ''}`}
+                value={delivery}
+                onChange={(e) => setDelivery(e.target.value)}
+              />
+            </span>
+          </Field>
+          <Field label="Discount (inc VAT)" hint="Not shown on the invoice if 0">
+            <span className="relative block">
+              <span className="absolute left-2.5 top-2 text-sm text-slate-400">£</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                placeholder="0"
+                className={`${inputClass} pl-6`}
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+              />
+            </span>
+          </Field>
+        </div>
         <div className="space-y-1 border-t border-slate-200 pt-3 text-sm dark:border-slate-700">
+          {deliveryValue !== null && (
+            <div className="flex justify-between text-slate-500">
+              <span>Delivery</span>
+              <span>{money(lineTotals(extras[0]).amount)}</span>
+            </div>
+          )}
+          {discountValue > 0 && (
+            <div className="flex justify-between text-slate-500">
+              <span>Discount</span>
+              <span>{money(lineTotals(extras[extras.length - 1]).amount)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Subtotal (ex VAT)</span>
             <span>{money(totals.subtotal)}</span>
