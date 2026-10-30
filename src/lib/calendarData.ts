@@ -72,7 +72,7 @@ export function calendarItems(data: CalendarData, profiles: Profile[], { showDec
       key: `h:${h.id}`,
       start: h.start_date,
       end: h.end_date,
-      label: `${who}${h.type !== 'Annual leave' ? ` (${h.type})` : ''}${h.status === 'pending' ? ' ?' : ''}`,
+      label: `${who}${h.note ? ` – ${h.note}` : h.type !== 'Annual leave' ? ` (${h.type})` : ''}${h.status === 'pending' ? ' ?' : ''}`,
       tone: h.status === 'approved' ? 'green' : h.status === 'pending' ? 'amber' : 'grey',
     })
   }
