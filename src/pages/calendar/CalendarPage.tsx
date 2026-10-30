@@ -10,6 +10,8 @@ import type { CalendarEvent, Holiday, HolidayStatus } from '../../lib/types'
 import { Button, Confirm, ErrorText, Loading, Modal, Toast, fmtDate, today } from '../../components/ui'
 import { Legend, MonthCalendar } from '../../components/MonthCalendar'
 import { EventForm, HolidayForm } from './forms'
+import { LeavePanel } from './LeavePanel'
+import { balanceFor, loadAllowances, type Allowance } from '../../lib/leave'
 
 const statusBadge: Record<HolidayStatus, string> = {
   approved: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',
@@ -25,6 +27,11 @@ export function CalendarPage() {
   const { profile, isManager } = useAuth()
   const profiles = useProfiles()
   const { data, error, loading } = useLive<CalendarData>(calendarTables, loadCalendar)
+  // Allowances: the database only returns the person's own row (or everyone's for managers).
+  const { data: leave } = useLive<{ list: Allowance[]; missing: boolean }>(['leave_allowances'], async () => {
+    const r = await loadAllowances()
+    return { data: { list: r.data, missing: r.missing }, error: null }
+  })
   const [month, setMonth] = useState(today())
   const [selected, setSelected] = useState<string | null>(null)
   const [holidayForm, setHolidayForm] = useState(false)
@@ -220,10 +227,22 @@ export function CalendarPage() {
             </section>
           )}
 
-          <section className="space-y-2">
-            <MonthCalendar month={month} items={items} onMonthChange={setMonth} onItemClick={setSelected} />
-            <Legend />
-          </section>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <section className="space-y-2">
+              <MonthCalendar month={month} items={items} onMonthChange={setMonth} onItemClick={setSelected} />
+              <Legend />
+            </section>
+            {profile && data && (
+              <LeavePanel
+                me={profile.id}
+                isManager={isManager}
+                profiles={profiles}
+                holidays={data.holidays}
+                allowances={leave?.list ?? []}
+                missing={leave?.missing ?? false}
+              />
+            )}
+          </div>
 
           <section>
             <h2 className="mb-2 font-semibold">Coming up (next 60 days)</h2>
@@ -248,7 +267,15 @@ export function CalendarPage() {
       )}
 
       {details()}
-      {holidayForm && profile && <HolidayForm profiles={profiles} me={profile.id} isManager={isManager} onClose={() => setHolidayForm(false)} />}
+      {holidayForm && profile && (
+        <HolidayForm
+          profiles={profiles}
+          me={profile.id}
+          isManager={isManager}
+          leftFor={(staffId, year) => balanceFor(staffId, year, data?.holidays ?? [], leave?.list ?? [], now).left}
+          onClose={() => setHolidayForm(false)}
+        />
+      )}
       {eventForm && <EventForm event={eventForm.event} onClose={() => setEventForm(null)} />}
       {confirm && <Confirm title={confirm.title} message={confirm.message} confirmLabel={confirm.label} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}

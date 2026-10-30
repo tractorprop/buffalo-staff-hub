@@ -8,11 +8,13 @@ export function HolidayForm({
   profiles,
   me,
   isManager,
+  leftFor,
   onClose,
 }: {
   profiles: Profile[]
   me: string
   isManager: boolean
+  leftFor?: (staffId: string, year: number) => number | null // annual leave days left, null if no allowance set
   onClose: () => void
 }) {
   const [staffId, setStaffId] = useState(me)
@@ -25,6 +27,7 @@ export function HolidayForm({
   const [busy, setBusy] = useState(false)
 
   const days = start && end && end >= start ? workingDays(start, end) : null
+  const left = days !== null && type === 'Annual leave' && leftFor ? leftFor(isManager ? staffId : me, Number(start.slice(0, 4))) : null
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -85,6 +88,12 @@ export function HolidayForm({
         {days !== null && (
           <p className="text-sm text-slate-600 dark:text-slate-300">
             {days} working day{days === 1 ? '' : 's'} (Mon–Fri)
+            {left !== null && (
+              <span className={days > left ? ' font-semibold text-red-600 dark:text-red-400' : ''}>
+                {' '}· {left} day{left === 1 ? '' : 's'} of annual leave left
+                {days > left && ' (this is more than is left)'}
+              </span>
+            )}
           </p>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
