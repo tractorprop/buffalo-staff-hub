@@ -51,17 +51,18 @@ async function loadAll(days: number) {
 
 // Turn activity-log rows into "−2 B600" / "+1 B600" movements.
 function movements(log: AuditEntry[]) {
-  const groups = new Map<string, { at: string; by: string | null; modelId: string; size: string | null; qty: number; ids: number[] }>()
+  const groups = new Map<string, { at: string; by: string | null; modelId: string; size: string | null; reference: string | null; qty: number; ids: number[] }>()
   for (const e of log) {
     const o = e.old_data as { status?: string } | null
-    const n = e.new_data as { status?: string; model_id?: string; size?: string | null; notes?: string | null } | null
+    const n = e.new_data as { status?: string; model_id?: string; size?: string | null; notes?: string | null; stock_reference?: string | null } | null
     let sign = 0
     if (e.action === 'UPDATE' && o?.status === 'in_stock' && n?.status === 'sold') sign = -1
     else if (e.action === 'UPDATE' && o?.status === 'sold' && n?.status === 'in_stock') sign = 1
     else if (e.action === 'INSERT' && n?.status === 'in_stock' && n?.notes === 'Return') sign = 1
     if (!sign || !n?.model_id) continue
-    const key = `${e.changed_at}|${e.changed_by}|${n.model_id}|${n.size ?? ''}|${sign}`
-    const g = groups.get(key) ?? { at: e.changed_at, by: e.changed_by, modelId: n.model_id, size: n.size ?? null, qty: 0, ids: [] }
+    const reference = n.stock_reference ?? null
+    const key = `${e.changed_at}|${e.changed_by}|${n.model_id}|${n.size ?? ''}|${sign}|${reference ?? ''}`
+    const g = groups.get(key) ?? { at: e.changed_at, by: e.changed_by, modelId: n.model_id, size: n.size ?? null, reference, qty: 0, ids: [] }
     g.qty += sign
     g.ids.push(e.id)
     groups.set(key, g)
@@ -78,6 +79,7 @@ export function StockEntryPage() {
   const [modelSearch, setModelSearch] = useState('')
   const { data, error, loading, reload } = useLive<Data>(['models', 'machines'], () => loadAll(days), [days])
   const [lines, setLines] = useState<Line[]>([newLine()])
+  const [reference, setReference] = useState('')
   const [formError, setFormError] = useState('')
   const [done, setDone] = useState('')
   const [busy, setBusy] = useState(false)
@@ -100,6 +102,8 @@ export function StockEntryPage() {
     setFormError('')
     setDone('')
     const filled = lines.filter((l) => l.modelId)
+    const ref = reference.trim()
+    if (!ref) return setFormError('Enter a reference number.')
     if (!filled.length) return setFormError('Choose a model.')
     for (const l of filled) {
       const m = data.models.find((x) => x.id === l.modelId)!
@@ -113,19 +117,20 @@ export function StockEntryPage() {
     const problems: string[] = []
     for (const l of filled) {
       const qty = l.direction === 'out' ? -l.qty : l.qty
-      const { error } = await supabase.rpc('record_stock_movement', { p_model_id: l.modelId, p_size: l.size || null, p_qty: qty })
+      const { error } = await supabase.rpc('record_stock_movement', { p_model_id: l.modelId, p_size: l.size || null, p_qty: qty, p_reference: ref })
       if (error) {
         failed.push(l)
         problems.push(
-          /could not find the function|record_stock_movement/i.test(error.message)
-            ? 'Stock entry is not switched on in the database yet. A manager needs to run the stock-entry SQL in Supabase.'
+          /could not find the function|record_stock_movement|stock_reference/i.test(error.message)
+            ? 'Reference numbers are not switched on in the database yet. The founder needs to run database/12-stock-entry-reference.sql in Supabase.'
             : `${modelLabel(l.modelId, l.size)}: ${friendlyError(error)}`,
         )
       } else ok.push(`${qty > 0 ? '+' : '−'}${l.qty} ${modelLabel(l.modelId, l.size)}`)
     }
     setBusy(false)
     setLines(failed.length ? failed : [newLine()])
-    if (ok.length) setDone(`Saved: ${ok.join(', ')}`)
+    if (!failed.length) setReference('')
+    if (ok.length) setDone(`Saved under reference ${ref}: ${ok.join(', ')}`)
     if (problems.length) setFormError([...new Set(problems)].join(' '))
     reload()
   }
@@ -136,7 +141,7 @@ export function StockEntryPage() {
       if (person && g.by !== person) return false
       if (!q) return true
       const m = data?.models.find((x) => x.id === g.modelId)
-      return `${nameOf(m, data?.models ?? [])} ${m?.name ?? ''} ${g.size ?? ''}`.toLowerCase().includes(q)
+      return `${nameOf(m, data?.models ?? [])} ${m?.name ?? ''} ${g.size ?? ''} ${g.reference ?? ''}`.toLowerCase().includes(q)
     })
   }, [data, person, modelSearch])
 
@@ -155,6 +160,18 @@ export function StockEntryPage() {
         <Loading />
       ) : (
         <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <label className="block">
+            <span className="text-sm font-semibold">Reference number *</span>
+            <input
+              className={`${inputClass} mt-1`}
+              required
+              maxLength={60}
+              placeholder="e.g. invoice number BM-1001 or delivery note number"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+            />
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Needed for every entry. Please don't type customer names here.</span>
+          </label>
           {lines.map((l) => {
             const m = data?.models.find((x) => x.id === l.modelId)
             const have = m && (!m.sizes.length || l.size) ? stock.get(`${m.id}|${l.size}`) ?? 0 : null
@@ -228,7 +245,7 @@ export function StockEntryPage() {
           </Button>
           <ErrorText>{formError}</ErrorText>
           {done && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">✓ {done}</p>}
-          <Button type="submit" variant="primary" className="w-full" disabled={busy}>
+          <Button type="submit" variant="primary" className="w-full" disabled={busy || !reference.trim()}>
             {busy ? 'Saving…' : 'Save stock entry'}
           </Button>
         </form>
@@ -246,7 +263,7 @@ export function StockEntryPage() {
                 </option>
               ))}
             </select>
-            <input className={inputClass} placeholder="Filter by model…" value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} />
+            <input className={inputClass} placeholder="Filter by model or reference number…" value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} />
           </div>
           {history.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">No stock entries in the last {days} days{person || modelSearch ? ' matching these filters' : ''}.</p>
@@ -257,15 +274,25 @@ export function StockEntryPage() {
                   <tr>
                     <th className="px-3 py-2">When</th>
                     <th className="px-3 py-2">Who</th>
+                    <th className="px-3 py-2">Reference</th>
                     <th className="px-3 py-2">Entry</th>
                     {isFounder && <th className="px-3 py-2"></th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {history.map((g) => (
-                    <tr key={`${g.at}${g.modelId}${g.size}${g.qty}`}>
+                    <tr key={`${g.at}${g.modelId}${g.size}${g.qty}${g.reference}`}>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{fmtDateTime(g.at)}</td>
                       <td className="px-3 py-2">{personName(profiles, g.by)}</td>
+                      <td className="px-3 py-2">
+                        {g.reference ? (
+                          <button className="font-mono text-xs font-semibold hover:underline" title="Show only this reference" onClick={() => setModelSearch(g.reference!)}>
+                            {g.reference}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">–</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <span className={`mr-2 font-bold ${g.qty < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
                           {g.qty < 0 ? `−${-g.qty}` : `+${g.qty}`}
@@ -277,7 +304,7 @@ export function StockEntryPage() {
                         <td className="px-3 py-2 text-right">
                           <button
                             className="text-xs text-red-600 hover:underline dark:text-red-400"
-                            onClick={() => setRemoveEntry({ ids: g.ids, label: `${g.qty < 0 ? '−' : '+'}${Math.abs(g.qty)} ${modelLabel(g.modelId, g.size)}` })}
+                            onClick={() => setRemoveEntry({ ids: g.ids, label: `${g.qty < 0 ? '−' : '+'}${Math.abs(g.qty)} ${modelLabel(g.modelId, g.size)}${g.reference ? ` (ref ${g.reference})` : ''}` })}
                           >
                             Delete
                           </button>

@@ -35,6 +35,7 @@ export interface Machine {
   location: string | null
   sold_date: string | null
   notes: string | null
+  stock_reference?: string | null // reference typed on the last stock entry (after 12-stock-entry-reference.sql)
   created_at: string
   updated_at: string
 }
