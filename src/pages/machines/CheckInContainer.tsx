@@ -23,17 +23,20 @@ interface Extra {
 
 let nextKey = 1
 
-// Manager checks what actually arrived in a container, then approves it into stock.
+// Staff count what actually arrived in a container and submit it. It only goes into stock once a
+// manager approves it; when a manager (or the founder) submits it themselves, it's approved straight away.
 export function CheckInContainer({
   containerRef,
   machines,
   models,
+  isManager,
   onClose,
   onDone,
 }: {
   containerRef: string
   machines: Machine[]
   models: Model[]
+  isManager: boolean
   onClose: () => void
   onDone: (summary: string) => void
 }) {
@@ -77,55 +80,48 @@ export function CheckInContainer({
     }
     setBusy(true)
     setError('')
-    const arrivedIds = lines.flatMap((l) => l.ids.slice(0, l.arrived))
     const removeIds = lines.filter((l) => l.missing === 'remove').flatMap((l) => l.ids.slice(l.arrived))
-    const extraRows = extras
-      .filter((e) => e.modelId)
-      .flatMap((e) =>
-        Array.from({ length: e.qty }, () => ({
-          model_id: e.modelId,
-          size: e.size || null,
-          status: 'in_stock',
-          container_ref: containerRef,
-          location: location.trim() || null,
-          notes: 'Extra: not on the original container list',
-        })),
+    const { data: row, error } = await supabase
+      .from('container_checkins')
+      .insert({
+        container_ref: containerRef,
+        arrive_ids: lines.flatMap((l) => l.ids.slice(0, l.arrived)),
+        remove_ids: removeIds,
+        extras: extras.filter((e) => e.modelId).map((e) => ({ model_id: e.modelId, size: e.size || null, qty: e.qty })),
+        location: location.trim() || null,
+      })
+      .select('id')
+      .single()
+    if (error || !row) {
+      setBusy(false)
+      return setError(
+        /container_checkins/.test(error?.message ?? '')
+          ? 'Container approvals are not switched on yet. The founder needs to run database/10-founder-and-approvals.sql in Supabase.'
+          : friendlyError(error),
       )
-
-    if (arrivedIds.length) {
-      const change: Record<string, unknown> = { status: 'in_stock' }
-      if (location.trim()) change.location = location.trim()
-      const { error } = await supabase.from('machines').update(change).in('id', arrivedIds)
-      if (error) return fail(error)
     }
-    if (removeIds.length) {
-      const { error } = await supabase.from('machines').delete().in('id', removeIds)
-      if (error) return fail(error)
-    }
-    if (extraRows.length) {
-      const { error } = await supabase.from('machines').insert(extraRows)
-      if (error) return fail(error)
+    if (isManager) {
+      const { error: approveError } = await supabase.rpc('approve_container_checkin', { p_id: row.id })
+      setBusy(false)
+      if (approveError) return setError(`Submitted, but approving failed: ${friendlyError(approveError)} Approve it from the containers list.`)
+      const kept = short - removeIds.length
+      return onDone(
+        `Container ${containerRef} checked in: ${arrived} added to stock` +
+          (removeIds.length ? `, ${removeIds.length} removed as missing` : '') +
+          (kept ? `, ${kept} still on the way` : '') +
+          '.',
+      )
     }
     setBusy(false)
-    const kept = short - removeIds.length
-    onDone(
-      `Container ${containerRef} checked in: ${arrived} added to stock` +
-        (removeIds.length ? `, ${removeIds.length} removed as missing` : '') +
-        (kept ? `, ${kept} still on the way` : '') +
-        '.',
-    )
-  }
-
-  function fail(err: { message?: string; code?: string }) {
-    setBusy(false)
-    setError(friendlyError(err) + ' Some changes may already have been saved, so please check the container before trying again.')
+    onDone(`Container ${containerRef} sent for approval. Stock is added once a manager approves it.`)
   }
 
   return (
     <Modal title={`Check in container ${containerRef}`} onClose={onClose} wide>
       <div className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Count what has actually arrived and enter it below. Only what you approve is added to stock.
+          Count what has actually arrived and enter it below.{' '}
+          {isManager ? 'Only what you approve is added to stock.' : 'A manager checks and approves it before anything is added to stock.'}
         </p>
 
         <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
@@ -251,7 +247,7 @@ export function CheckInContainer({
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={busy || arrived === 0 && short === 0} onClick={approve}>
-            {busy ? 'Saving…' : 'Approve and add to stock'}
+            {busy ? 'Saving…' : isManager ? 'Approve and add to stock' : 'Submit for approval'}
           </Button>
         </div>
       </div>

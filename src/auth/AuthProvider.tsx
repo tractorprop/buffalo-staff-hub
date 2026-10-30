@@ -6,7 +6,8 @@ import type { Profile } from '../lib/types'
 interface AuthState {
   session: Session | null
   profile: Profile | null
-  isManager: boolean
+  isManager: boolean // managers and the founder
+  isFounder: boolean
   loading: boolean
   signOut: () => Promise<void>
 }
@@ -55,7 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthState = {
     session,
     profile,
-    isManager: profile?.role === 'manager',
+    isManager: profile?.role === 'manager' || profile?.role === 'founder',
+    isFounder: profile?.role === 'founder',
     loading,
     signOut: async () => {
       await supabase?.auth.signOut()

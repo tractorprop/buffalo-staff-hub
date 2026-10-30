@@ -23,7 +23,7 @@ const keyOf = (id: string, size: string | null) => `${id}|${size ?? ''}`
 
 // Everyone can see prices; managers can type them in and save them all at once.
 export function PriceList({ models }: { models: Model[] }) {
-  const { isManager } = useAuth()
+  const { isFounder } = useAuth()
   const [search, setSearch] = useState('')
   const [show, setShow] = useState<Show>('all')
   const [edits, setEdits] = useState<Record<string, string>>({})
@@ -115,7 +115,7 @@ export function PriceList({ models }: { models: Model[] }) {
     <div className="space-y-3">
       <p className="text-sm text-slate-600 dark:text-slate-300">
         Prices are <strong>including VAT</strong>, the same as your website. Items that come in sizes have a price for each size.{' '}
-        {isManager ? 'Type a price in, then click Save.' : 'Only managers can change prices.'}
+        {isFounder ? 'Type a price in, then click Save.' : 'Only the founder can change prices.'}
       </p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input className={inputClass} placeholder="Search machine, accessory or size…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -127,7 +127,7 @@ export function PriceList({ models }: { models: Model[] }) {
         </select>
       </div>
 
-      {isManager && changed.length > 0 && (
+      {isFounder && changed.length > 0 && (
         <div className="sticky top-20 z-10 flex items-center gap-3 rounded-lg bg-ink p-3 text-sm text-white">
           {changed.length} unsaved change{changed.length === 1 ? '' : 's'}
           <Button size="sm" variant="primary" className="ml-auto" disabled={busy} onClick={save}>
@@ -175,7 +175,7 @@ export function PriceList({ models }: { models: Model[] }) {
                     {size && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{size}</span>}
                   </td>
                   <td className="px-3 py-1.5 text-right">
-                    {isManager ? (
+                    {isFounder ? (
                       <span className="relative inline-block">
                         <span className="absolute left-2 top-1.5 text-slate-400">£</span>
                         <input

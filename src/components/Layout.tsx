@@ -15,7 +15,8 @@ const links = [
 ]
 
 export function Layout() {
-  const { profile, isManager, signOut } = useAuth()
+  const { profile, isManager, isFounder, signOut } = useAuth()
+  const roleLabel = isFounder ? 'Founder' : isManager ? 'Manager' : 'Staff'
   const [menuOpen, setMenuOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(currentTheme())
 
@@ -64,7 +65,7 @@ export function Layout() {
             </button>
             <div className="hidden text-right text-sm sm:block">
               <div className="font-medium">{profile?.full_name ?? profile?.email}</div>
-              <div className="text-xs text-brand-500">{isManager ? 'Manager' : 'Staff'}</div>
+              <div className="text-xs text-brand-500">{roleLabel}</div>
             </div>
             <button
               onClick={signOut}
@@ -77,7 +78,7 @@ export function Layout() {
         {menuOpen && (
           <nav className="space-y-1 border-t border-white/10 px-4 py-2 lg:hidden">
             <div className="px-3 py-1 text-sm text-white/60 sm:hidden">
-              {profile?.full_name ?? profile?.email} · {isManager ? 'Manager' : 'Staff'}
+              {profile?.full_name ?? profile?.email} · {roleLabel}
             </div>
             {links.map((l) => (
               <NavLink key={l.to} to={l.to} end={l.to === '/'} className={linkClass} onClick={() => setMenuOpen(false)}>

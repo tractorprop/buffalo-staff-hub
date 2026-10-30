@@ -50,7 +50,7 @@ const diggers = [
 ]
 
 export function DashboardPage() {
-  const { profile } = useAuth()
+  const { profile, isManager } = useAuth()
   const profiles = useProfiles()
   const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist', 'tasks', 'holidays', 'events'], loadAll)
   const now = today()
@@ -162,6 +162,7 @@ export function DashboardPage() {
               </span>
             </div>
           </Card>
+{isManager && (
           <Card title="🏖️ Who's off">
             <h3 className="text-xs font-semibold uppercase text-slate-500">Today</h3>
             {d.offToday.length === 0 ? (
@@ -192,6 +193,7 @@ export function DashboardPage() {
               </ul>
             )}
           </Card>
+          )}
         </div>
       </div>
     </div>

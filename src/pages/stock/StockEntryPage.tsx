@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { useLive } from '../../lib/useLive'
+import { useAuth } from '../../auth/AuthProvider'
 import { personName, useProfiles } from '../../lib/useProfiles'
 import type { AuditEntry, Model } from '../../lib/types'
-import { Button, ErrorText, Loading, fmtDateTime, inputClass } from '../../components/ui'
+import { Button, Confirm, ErrorText, Loading, fmtDateTime, inputClass } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
 import { modelLabel as nameOf } from '../../lib/modelLabel'
 
@@ -50,7 +51,7 @@ async function loadAll(days: number) {
 
 // Turn activity-log rows into "−2 B600" / "+1 B600" movements.
 function movements(log: AuditEntry[]) {
-  const groups = new Map<string, { at: string; by: string | null; modelId: string; size: string | null; qty: number }>()
+  const groups = new Map<string, { at: string; by: string | null; modelId: string; size: string | null; qty: number; ids: number[] }>()
   for (const e of log) {
     const o = e.old_data as { status?: string } | null
     const n = e.new_data as { status?: string; model_id?: string; size?: string | null; notes?: string | null } | null
@@ -60,8 +61,9 @@ function movements(log: AuditEntry[]) {
     else if (e.action === 'INSERT' && n?.status === 'in_stock' && n?.notes === 'Return') sign = 1
     if (!sign || !n?.model_id) continue
     const key = `${e.changed_at}|${e.changed_by}|${n.model_id}|${n.size ?? ''}|${sign}`
-    const g = groups.get(key) ?? { at: e.changed_at, by: e.changed_by, modelId: n.model_id, size: n.size ?? null, qty: 0 }
+    const g = groups.get(key) ?? { at: e.changed_at, by: e.changed_by, modelId: n.model_id, size: n.size ?? null, qty: 0, ids: [] }
     g.qty += sign
+    g.ids.push(e.id)
     groups.set(key, g)
   }
   return [...groups.values()]
@@ -69,6 +71,8 @@ function movements(log: AuditEntry[]) {
 
 export function StockEntryPage() {
   const profiles = useProfiles()
+  const { isFounder } = useAuth()
+  const [removeEntry, setRemoveEntry] = useState<{ ids: number[]; label: string } | null>(null)
   const [days, setDays] = useState(30)
   const [person, setPerson] = useState('')
   const [modelSearch, setModelSearch] = useState('')
@@ -254,6 +258,7 @@ export function StockEntryPage() {
                     <th className="px-3 py-2">When</th>
                     <th className="px-3 py-2">Who</th>
                     <th className="px-3 py-2">Entry</th>
+                    {isFounder && <th className="px-3 py-2"></th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -268,6 +273,16 @@ export function StockEntryPage() {
                         <span className="font-medium">{modelLabel(g.modelId, g.size)}</span>
                         <span className="ml-1 text-xs text-slate-500">{g.qty < 0 ? 'left (sold)' : 'returned'}</span>
                       </td>
+                      {isFounder && (
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            className="text-xs text-red-600 hover:underline dark:text-red-400"
+                            onClick={() => setRemoveEntry({ ids: g.ids, label: `${g.qty < 0 ? '−' : '+'}${Math.abs(g.qty)} ${modelLabel(g.modelId, g.size)}` })}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -281,6 +296,19 @@ export function StockEntryPage() {
             </Button>
           </div>
         </section>
+      )}
+      {removeEntry && (
+        <Confirm
+          title="Delete this history entry?"
+          message={`"${removeEntry.label}" is removed from the history only. Stock levels do not change.`}
+          onConfirm={async () => {
+            const { error } = await supabase!.from('audit_log').delete().in('id', removeEntry.ids)
+            if (error) setFormError(friendlyError(error))
+            setRemoveEntry(null)
+            reload()
+          }}
+          onCancel={() => setRemoveEntry(null)}
+        />
       )}
     </div>
   )

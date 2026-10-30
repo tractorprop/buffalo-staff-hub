@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { supabase, friendlyError } from '../../lib/supabase'
+import { useAuth } from '../../auth/AuthProvider'
 import { useLive } from '../../lib/useLive'
 import { personName, useProfiles } from '../../lib/useProfiles'
 import type { AuditEntry, Model } from '../../lib/types'
-import { Button, ErrorText, fmtDateTime, inputClass } from '../../components/ui'
+import { Button, Confirm, ErrorText, fmtDateTime, inputClass } from '../../components/ui'
 import { labelFor } from '../../lib/modelLabel'
 
 type Row = { model_id?: string; size?: string | null; status?: string; container_ref?: string | null; notes?: string | null }
@@ -16,6 +17,7 @@ interface Arrival {
   arrived: Map<string, number>
   extra: Map<string, number>
   missing: Map<string, number>
+  ids: number[] // activity-log rows behind this arrival
 }
 
 async function load(days: number) {
@@ -52,10 +54,11 @@ function group(log: AuditEntry[], label: (r: Row) => string) {
       (x) => x.ref === ref && x.by === e.changed_by && new Date(e.changed_at).getTime() - new Date(x.lastAt).getTime() < 5 * 60e3,
     )
     if (!a) {
-      a = { at: e.changed_at, lastAt: e.changed_at, by: e.changed_by, ref, arrived: new Map(), extra: new Map(), missing: new Map() }
+      a = { at: e.changed_at, lastAt: e.changed_at, by: e.changed_by, ref, arrived: new Map(), extra: new Map(), missing: new Map(), ids: [] }
       out.push(a)
     }
     a.lastAt = e.changed_at
+    a.ids.push(e.id)
     const m = a[kind]
     const l = label(row)
     m.set(l, (m.get(l) ?? 0) + 1)
@@ -73,9 +76,12 @@ const total = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b
 
 export function ArrivalHistory({ models }: { models: Model[] }) {
   const profiles = useProfiles()
+  const { isFounder } = useAuth()
+  const [remove, setRemove] = useState<Arrival | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const [days, setDays] = useState(90)
   const [search, setSearch] = useState('')
-  const { data, error, loading } = useLive<AuditEntry[]>(['machines'], () => load(days), [days])
+  const { data, error, loading, reload } = useLive<AuditEntry[]>(['machines'], () => load(days), [days])
 
   const arrivals = useMemo(() => {
     const label = (r: Row) => labelFor(r.model_id ?? '', models, r.size)
@@ -90,7 +96,20 @@ export function ArrivalHistory({ models }: { models: Model[] }) {
       <h2 className="text-lg font-semibold">📦 Container arrival history</h2>
       <p className="text-sm text-slate-500 dark:text-slate-400">Stock approved into the warehouse from containers: what arrived, who approved it and when.</p>
       <input className={inputClass} placeholder="Search container, model or person…" value={search} onChange={(e) => setSearch(e.target.value)} />
-      <ErrorText>{error}</ErrorText>
+      <ErrorText>{error || deleteError}</ErrorText>
+      {remove && (
+        <Confirm
+          title={`Delete this arrival record for ${remove.ref}?`}
+          message="It is removed from the history only. Stock levels do not change."
+          onConfirm={async () => {
+            const { error } = await supabase!.from('audit_log').delete().in('id', remove.ids)
+            setDeleteError(error ? friendlyError(error) : '')
+            setRemove(null)
+            reload()
+          }}
+          onCancel={() => setRemove(null)}
+        />
+      )}
       {loading ? null : arrivals.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">No container arrivals approved in the last {days} days{search ? ' matching your search' : ''}.</p>
       ) : (
@@ -105,6 +124,11 @@ export function ArrivalHistory({ models }: { models: Model[] }) {
                 <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
                   Approved by <strong className="text-slate-700 dark:text-slate-200">{personName(profiles, a.by)}</strong> · {fmtDateTime(a.at)}
                 </span>
+                {isFounder && (
+                  <button className="text-xs text-red-600 hover:underline dark:text-red-400" onClick={() => setRemove(a)}>
+                    Delete
+                  </button>
+                )}
               </div>
               {a.arrived.size > 0 && <div className="mt-1">✅ {list(a.arrived)}</div>}
               {a.extra.size > 0 && <div className="mt-0.5 text-sky-700 dark:text-sky-300">➕ Extras: {list(a.extra)}</div>}

@@ -42,7 +42,7 @@ const tabs = [
 ] as const
 
 export function SalesPage() {
-  const { isManager } = useAuth()
+  const { isFounder } = useAuth()
   const { data, error, loading } = useLive<SalesData>(['models', 'invoices', 'company_settings'], load)
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') ?? 'new'
@@ -53,7 +53,7 @@ export function SalesPage() {
 
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
         {tabs
-          .filter((t) => t.key !== 'company' || isManager)
+          .filter((t) => t.key !== 'company' || isFounder)
           .map((t) => (
             <button
               key={t.key}
@@ -85,7 +85,7 @@ export function SalesPage() {
         <InvoiceHistory data={data} />
       ) : tab === 'prices' ? (
         <PriceList models={data.models} />
-      ) : tab === 'company' && isManager ? (
+      ) : tab === 'company' && isFounder ? (
         <CompanyDetails company={data.company} />
       ) : (
         <NewInvoice data={data} />

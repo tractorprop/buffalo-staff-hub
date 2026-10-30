@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
-import type { Machine, MachineStatus, Model, WaitlistEntry } from '../../lib/types'
+import type { Machine, MachineStatus, Model, WaitlistEntry, ContainerCheckin } from '../../lib/types'
 import {
   Button,
   Confirm,
@@ -24,6 +24,7 @@ import { History } from './History'
 import { ContainerForm } from './ContainerForm'
 import { CheckInContainer } from './CheckInContainer'
 import { ArrivalHistory } from './ArrivalHistory'
+import { ReviewCheckin } from './ReviewCheckin'
 import { StockOverview } from '../../components/StockOverview'
 import { isMachine, modelLabel } from '../../lib/modelLabel'
 
@@ -34,17 +35,26 @@ interface Data {
   models: Model[]
   machines: Machine[]
   waiting: WaitlistEntry[]
+  checkins: ContainerCheckin[] // pending container check-ins waiting for a manager
 }
 
 async function loadAll() {
-  const [models, machines, waiting] = await Promise.all([
+  const [models, machines, waiting, checkins] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
     supabase!.from('machines').select('*').order('created_at'),
     supabase!.from('waitlist').select('*').eq('contacted', false).order('created_at'),
+    supabase!.from('container_checkins').select('*').eq('status', 'pending').order('submitted_at'),
   ])
   const error = models.error ?? machines.error ?? waiting.error
   return {
-    data: error ? null : { models: models.data as Model[], machines: machines.data as Machine[], waiting: waiting.data as WaitlistEntry[] },
+    data: error
+      ? null
+      : {
+          models: models.data as Model[],
+          machines: machines.data as Machine[],
+          waiting: waiting.data as WaitlistEntry[],
+          checkins: (checkins.data as ContainerCheckin[] | null) ?? [],
+        },
     error,
   }
 }
@@ -52,8 +62,10 @@ async function loadAll() {
 const statusOrder: Record<MachineStatus, number> = { in_stock: 0, en_route: 1, sold: 2 }
 
 export function MachinesPage() {
-  const { isManager } = useAuth()
-  const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist'], loadAll)
+  const { isManager, isFounder } = useAuth()
+  const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist', 'container_checkins'], loadAll)
+  const [review, setReview] = useState<ContainerCheckin | null>(null)
+  const pendingFor = (ref: string) => data?.checkins.find((c) => c.container_ref === ref)
   const [params, setParams] = useSearchParams()
   const filter = (params.get('status') as Filter) || 'all'
   const [search, setSearch] = useState('')
@@ -275,7 +287,7 @@ export function MachinesPage() {
                   <div className="space-y-4 border-t border-slate-200 px-4 py-4 dark:border-slate-800">
                     {r.model.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{r.model.notes}</p>}
 
-                    {isManager && (
+                    {isFounder && (
                       <div className="flex flex-wrap gap-2">
                         <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
                           Edit {r.model.kind === 'accessory' ? 'accessory' : 'model'}
@@ -301,6 +313,7 @@ export function MachinesPage() {
                         machines={shown}
                         hasSizes={r.model.sizes.length > 0}
                         isManager={isManager}
+                        isFounder={isFounder}
                         onEdit={(m) => setMachineForm({ machine: m })}
                         onHistory={(m) => setHistory({ machine: m, title: modelLabel(r.model, data?.models ?? [], m.size) })}
                         onArrived={(m) => setStatus(m, 'in_stock')}
@@ -384,14 +397,14 @@ export function MachinesPage() {
           >
             ± Stock entry
           </Link>
-          <Button onClick={() => setModelForm({})} disabled={!isManager} title={isManager ? undefined : 'Managers only'}>
+          <Button onClick={() => setModelForm({})} disabled={!isFounder} title={isFounder ? undefined : 'Founder only'}>
             + Add model / accessory
           </Button>
           <Button
             variant="primary"
             onClick={() => setContainerForm(true)}
-            disabled={!isManager || !data?.models.length}
-            title={isManager ? undefined : 'Managers only'}
+            disabled={!isFounder || !data?.models.length}
+            title={isFounder ? undefined : 'Founder only'}
           >
             + Add container
           </Button>
@@ -409,6 +422,21 @@ export function MachinesPage() {
           }}
           onModel={openModel}
         />
+      )}
+
+      {isManager && (data?.checkins.length ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-brand-500 bg-brand-50 px-4 py-3 text-sm dark:bg-brand-500/10">
+          <span className="font-semibold">
+            ⏳ {data!.checkins.length} container check-in{data!.checkins.length === 1 ? '' : 's'} waiting for your approval
+          </span>
+          <span className="ml-auto flex flex-wrap gap-1.5">
+            {data!.checkins.map((c) => (
+              <Button key={c.id} size="sm" variant="primary" onClick={() => setReview(c)}>
+                Review {c.container_ref}
+              </Button>
+            ))}
+          </span>
+        </div>
       )}
 
       {containers.length > 0 && (
@@ -491,7 +519,7 @@ export function MachinesPage() {
         <Loading />
       ) : !data?.models.length ? (
         <Empty title="No models yet">
-          {isManager ? 'Click "+ Add model" to add each model you sell, then "+ Add container" to add stock.' : 'A manager needs to add the models you sell.'}
+          {isFounder ? 'Click "+ Add model" to add each model you sell, then "+ Add container" to add stock.' : 'The founder needs to add the models you sell.'}
         </Empty>
       ) : rows.length === 0 ? (
         <Empty title="Nothing matches">Try a different search or tab.</Empty>
@@ -593,7 +621,24 @@ export function MachinesPage() {
                     </div>
                     <div className="text-slate-600 dark:text-slate-300">{c.contents.map(([label, n]) => `${n}× ${label}`).join(', ')}</div>
                   </div>
-                  {isManager && (
+                  {pendingFor(c.ref) ? (
+                    isManager ? (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => {
+                          setShowContainers(false)
+                          setReview(pendingFor(c.ref)!)
+                        }}
+                      >
+                        ⏳ Review & approve
+                      </Button>
+                    ) : (
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        ⏳ Waiting for manager approval
+                      </span>
+                    )
+                  ) : (
                     <Button
                       size="sm"
                       variant="primary"
@@ -616,10 +661,23 @@ export function MachinesPage() {
           containerRef={checkIn}
           machines={data.machines}
           models={data.models}
+          isManager={isManager}
           onClose={() => setCheckIn(null)}
           onDone={(summary) => {
             setCheckIn(null)
             setToast(summary)
+          }}
+        />
+      )}
+      {review && data && (
+        <ReviewCheckin
+          checkin={review}
+          machines={data.machines}
+          models={data.models}
+          onClose={() => setReview(null)}
+          onDone={(message) => {
+            setReview(null)
+            setToast(message)
           }}
         />
       )}
@@ -637,6 +695,7 @@ function MachineList({
   machines,
   hasSizes,
   isManager,
+  isFounder,
   onEdit,
   onHistory,
   onArrived,
@@ -646,6 +705,7 @@ function MachineList({
   machines: Machine[]
   hasSizes: boolean
   isManager: boolean
+  isFounder: boolean
   onEdit: (m: Machine) => void
   onHistory: (m: Machine) => void
   onArrived: (m: Machine) => void
@@ -672,7 +732,7 @@ function MachineList({
       <Button size="sm" variant="ghost" onClick={() => onHistory(m)}>
         History
       </Button>
-      {isManager && (
+      {isFounder && (
         <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => onDelete(m)}>
           Delete
         </Button>

@@ -105,7 +105,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
     if (!company?.prices_include_vat)
       return setError('Prices including VAT are not switched on yet. A manager needs to run database/09-prices-include-vat.sql in Supabase.')
     if (!company?.account_number || !company?.sort_code)
-      return setError('Bank details are missing. A manager needs to fill in Sales → Company details first.')
+      return setError('Bank details are missing. The founder needs to fill in Sales → Company details first.')
     setError('')
     // Open the window now, while the click is fresh, so the browser doesn't block it.
     const win = openInvoiceWindow()

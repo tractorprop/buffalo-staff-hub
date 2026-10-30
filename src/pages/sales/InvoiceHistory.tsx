@@ -10,7 +10,7 @@ import { invoiceHtml, openInvoiceWindow, showInvoice } from './invoiceDocument'
 import type { SalesData } from './SalesPage'
 
 export function InvoiceHistory({ data }: { data: SalesData }) {
-  const { isManager } = useAuth()
+  const { isFounder } = useAuth()
   const profiles = useProfiles()
   const [search, setSearch] = useState('')
   const [reprint, setReprint] = useState<Invoice | null>(null)
@@ -70,7 +70,7 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
                 >
                   🖨️ Reprint
                 </Button>
-                {isManager && (
+                {isFounder && (
                   <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirm(i)}>
                     Delete
                   </Button>

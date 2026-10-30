@@ -1,4 +1,4 @@
-export type Role = 'staff' | 'manager'
+export type Role = 'staff' | 'manager' | 'founder'
 
 export interface Profile {
   id: string
@@ -147,4 +147,19 @@ export interface Invoice {
   total: number
   created_by: string | null
   created_at: string
+}
+
+// A container check-in submitted by staff, waiting for a manager to approve it.
+export interface ContainerCheckin {
+  id: string
+  container_ref: string
+  arrive_ids: string[]
+  remove_ids: string[]
+  extras: { model_id: string; size: string | null; qty: number }[]
+  location: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  submitted_by: string | null
+  submitted_at: string
+  decided_by: string | null
+  decided_at: string | null
 }
