@@ -60,7 +60,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
       key: nextKey++,
       description: size ? `${describe(m)} ${size}` : describe(m),
       qty,
-      unit_price: price ?? 0,
+      unit_price_inc: price ?? 0,
       vat_rate: 0.2,
       noPrice: price == null,
     }
@@ -80,7 +80,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
   }
 
   const addCustom = (description = '', price = 0) =>
-    setLines((ls) => [...ls, { key: nextKey++, description, qty: 1, unit_price: price, vat_rate: 0.2 }])
+    setLines((ls) => [...ls, { key: nextKey++, description, qty: 1, unit_price_inc: price, vat_rate: 0.2 }])
   const update = (key: number, change: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...change, noPrice: false } : l)))
   const totals = invoiceTotals(lines)
 
@@ -89,6 +89,8 @@ export function NewInvoice({ data }: { data: SalesData }) {
     if (!customer.name.trim()) return setError('Enter the customer name.')
     if (!lines.length) return setError('Add at least one item.')
     if (lines.some((l) => !l.description.trim() || !(l.qty > 0))) return setError('Every line needs a description and a quantity above 0.')
+    if (!company?.prices_include_vat)
+      return setError('Prices including VAT are not switched on yet. A manager needs to run database/09-prices-include-vat.sql in Supabase.')
     if (!company?.account_number || !company?.sort_code)
       return setError('Bank details are missing. A manager needs to fill in Sales → Company details first.')
     setError('')
@@ -96,7 +98,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
     const win = openInvoiceWindow()
     if (!win) return setError('Your browser blocked the invoice window. Allow pop-ups for this site and try again.')
     setBusy(true)
-    const clean: InvoiceLine[] = lines.map(({ description, qty, unit_price, vat_rate }) => ({ description: description.trim(), qty, unit_price, vat_rate }))
+    const clean: InvoiceLine[] = lines.map(({ description, qty, unit_price_inc, vat_rate }) => ({ description: description.trim(), qty, unit_price_inc, vat_rate }))
     const { data: inv, error } = await supabase
       .from('invoices')
       .insert({ invoice_date: date, lines: clean, ...totals })
@@ -188,7 +190,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
                   {m.sizes.length ? (
                     <span className="text-slate-500">{m.sizes.length} sizes</span>
                   ) : priceOf(m) != null ? (
-                    `${money(priceOf(m)!)} ex VAT`
+                    `${money(priceOf(m)!)} inc VAT`
                   ) : (
                     <span className="text-amber-600">No price set</span>
                   )}
@@ -336,10 +338,11 @@ export function NewInvoice({ data }: { data: SalesData }) {
                       type="number"
                       min={0}
                       step="0.01"
-                      aria-label="Price excluding VAT"
+                      aria-label="Price including VAT"
+                      title="Price including VAT"
                       className="w-24 rounded border border-slate-300 bg-white py-0.5 pl-4 pr-1 text-right dark:border-slate-700 dark:bg-slate-950"
-                      value={l.unit_price}
-                      onChange={(e) => update(l.key, { unit_price: Math.max(0, parseFloat(e.target.value) || 0) })}
+                      value={l.unit_price_inc ?? 0}
+                      onChange={(e) => update(l.key, { unit_price_inc: Math.max(0, parseFloat(e.target.value) || 0) })}
                     />
                   </span>
                   <select
@@ -348,8 +351,8 @@ export function NewInvoice({ data }: { data: SalesData }) {
                     value={l.vat_rate}
                     onChange={(e) => update(l.key, { vat_rate: parseFloat(e.target.value) })}
                   >
-                    <option value={0.2}>VAT 20%</option>
-                    <option value={0}>No VAT</option>
+                    <option value={0.2}>inc VAT</option>
+                    <option value={0}>No VAT (export)</option>
                   </select>
                   <span className="ml-auto font-semibold">{money(lineTotals(l).amount)}</span>
                 </div>
@@ -377,7 +380,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
           {busy ? 'Creating…' : '🧾 Create invoice & save as PDF'}
         </Button>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          This gives the invoice the next number. The PDF opens in a new tab; choose <strong>Save as PDF</strong>.
+          Prices are including VAT. This gives the invoice the next number. The PDF opens in a new tab; choose <strong>Save as PDF</strong>.
         </p>
       </section>
     </div>

@@ -106,7 +106,7 @@ export function PriceList({ models }: { models: Model[] }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        Prices are <strong>excluding VAT</strong>. Items that come in sizes have a price for each size.{' '}
+        Prices are <strong>including VAT</strong>, the same as your website. Items that come in sizes have a price for each size.{' '}
         {isManager ? 'Type a price in, then click Save.' : 'Only managers can change prices.'}
       </p>
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -138,8 +138,8 @@ export function PriceList({ models }: { models: Model[] }) {
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
             <tr>
               <th className="px-3 py-2">Item</th>
-              <th className="px-3 py-2 text-right">Price ex VAT</th>
-              <th className="hidden px-3 py-2 text-right sm:table-cell">Inc VAT</th>
+              <th className="px-3 py-2 text-right">Price inc VAT</th>
+              <th className="hidden px-3 py-2 text-right sm:table-cell">Ex VAT</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -185,7 +185,7 @@ export function PriceList({ models }: { models: Model[] }) {
                       <span className="text-amber-600">Not set</span>
                     )}
                   </td>
-                  <td className="hidden px-3 py-1.5 text-right text-slate-500 sm:table-cell">{value !== '' && !Number.isNaN(n) ? money(round2(n * 1.2)) : ''}</td>
+                  <td className="hidden px-3 py-1.5 text-right text-slate-500 sm:table-cell">{value !== '' && !Number.isNaN(n) ? money(round2(n / 1.2)) : ''}</td>
                 </tr>
               )
             })}

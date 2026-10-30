@@ -76,6 +76,11 @@ export function SalesPage() {
         <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
           Sales is not switched on yet. A manager needs to run <code>database/07-sales.sql</code> in Supabase.
         </p>
+      ) : !data.company?.prices_include_vat && tab !== 'company' ? (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          Prices are now typed <strong>including VAT</strong>. A manager needs to run <code>database/09-prices-include-vat.sql</code> in Supabase
+          once, which converts any prices already entered.
+        </p>
       ) : tab === 'history' ? (
         <InvoiceHistory data={data} />
       ) : tab === 'prices' ? (

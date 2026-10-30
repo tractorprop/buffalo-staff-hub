@@ -27,7 +27,7 @@ export function invoiceHtml(opts: { number: number; date: string; customer: Cust
   const rows = opts.lines
     .map((l) => {
       const lt = lineTotals(l)
-      return `<tr><td>${esc(l.description)}</td><td class="c">${l.qty}</td><td>${money(l.unit_price)}</td><td>${money(lt.vat)}</td><td>${money(lt.amount)}</td></tr>`
+      return `<tr><td>${esc(l.description)}</td><td class="c">${l.qty}</td><td>${money(lt.unitNet)}</td><td>${money(lt.vat)}</td><td>${money(lt.amount)}</td></tr>`
     })
     .join('')
   const filler = '<tr><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(Math.max(0, 6 - opts.lines.length))

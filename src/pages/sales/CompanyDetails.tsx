@@ -5,7 +5,9 @@ import { Button, ErrorText, Field, inputClass } from '../../components/ui'
 
 // Suggested starting values from the existing Buffalo Machines invoice (public company details only;
 // bank details are typed in here and stored in the database, never in the code).
-const suggested: Partial<CompanySettings> = {
+type TextKey = Exclude<keyof CompanySettings, 'prices_include_vat'>
+
+const suggested: Partial<Record<TextKey, string>> = {
   company_name: 'BUFFALO MACHINES',
   address: 'Unit 1, Hendon Barn, Ashford, Kent, TN26 3QP',
   phone: '01622 371145',
@@ -17,7 +19,7 @@ const suggested: Partial<CompanySettings> = {
   terms: "Please see our website to read the terms\nand conditions under our 'Policies' section",
 }
 
-const fields: { key: keyof CompanySettings; label: string; multiline?: boolean; group: string }[] = [
+const fields: { key: TextKey; label: string; multiline?: boolean; group: string }[] = [
   { key: 'company_name', label: 'Company name', group: 'Top of the invoice' },
   { key: 'address', label: 'Address', group: 'Top of the invoice' },
   { key: 'phone', label: 'Phone', group: 'Top of the invoice' },
@@ -32,8 +34,8 @@ const fields: { key: keyof CompanySettings; label: string; multiline?: boolean; 
 ]
 
 export function CompanyDetails({ company }: { company: CompanySettings | null }) {
-  const [form, setForm] = useState<CompanySettings>(() => {
-    const base = Object.fromEntries(fields.map((f) => [f.key, company?.[f.key] ?? ''])) as unknown as CompanySettings
+  const [form, setForm] = useState<Record<TextKey, string>>(() => {
+    const base = Object.fromEntries(fields.map((f) => [f.key, company?.[f.key] ?? ''])) as Record<TextKey, string>
     const empty = fields.every((f) => !company?.[f.key])
     return empty ? { ...base, ...suggested } : base
   })
