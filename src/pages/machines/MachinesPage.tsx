@@ -25,7 +25,6 @@ import { CheckInContainer } from './CheckInContainer'
 import { ArrivalHistory } from './ArrivalHistory'
 import { ReviewCheckin } from './ReviewCheckin'
 import { ContainersWindow } from './ContainersWindow'
-import { MergeAccessories, duplicateAccessoryGroups } from './MergeAccessories'
 import { StockOverview } from '../../components/StockOverview'
 import { isMachine, modelLabel } from '../../lib/modelLabel'
 
@@ -66,8 +65,6 @@ export function MachinesPage() {
   const { isManager, isFounder } = useAuth()
   const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist', 'container_checkins'], loadAll)
   const [review, setReview] = useState<ContainerCheckin | null>(null)
-  const [merging, setMerging] = useState(false)
-  const duplicateGroups = useMemo(() => (isFounder && data ? duplicateAccessoryGroups(data.models) : []), [isFounder, data])
   const pendingFor = (ref: string) => data?.checkins.find((c) => c.container_ref === ref)
   const [params, setParams] = useSearchParams()
   const filter = (params.get('status') as Filter) || 'all'
@@ -461,16 +458,6 @@ export function MachinesPage() {
         </button>
       )}
 
-      {duplicateGroups.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm dark:border-sky-900 dark:bg-sky-950/30">
-          🔗 <strong>{duplicateGroups.length}</strong> accessor{duplicateGroups.length === 1 ? 'y looks' : 'ies look'} like the same part saved separately for
-          different machines.
-          <Button size="sm" className="ml-auto" onClick={() => setMerging(true)}>
-            Review & merge
-          </Button>
-        </div>
-      )}
-
       {machineModels.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[...categories, 'all', ...(categoriesInUse && catCount('none') > 0 ? ['none'] : [])].map((c) => (
@@ -626,6 +613,8 @@ export function MachinesPage() {
           initial={showContainers}
           pendingFor={pendingFor}
           isManager={isManager}
+          isFounder={isFounder}
+          onDeleted={(msg) => setToast(msg)}
           onCheckIn={(ref) => {
             setShowContainers(false)
             setCheckIn(ref)
@@ -648,14 +637,6 @@ export function MachinesPage() {
             setCheckIn(null)
             setToast(summary)
           }}
-        />
-      )}
-      {merging && data && (
-        <MergeAccessories
-          models={data.models}
-          machines={data.machines}
-          onClose={() => setMerging(false)}
-          onDone={(msg) => setToast(msg)}
         />
       )}
       {review && data && (

@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { supabase, friendlyError } from '../../lib/supabase'
 import type { Container } from '../../lib/calendarData'
 import { addDays } from '../../lib/dates'
 import type { ContainerCheckin } from '../../lib/types'
-import { Button, Modal, fmtDate, today } from '../../components/ui'
+import { Button, Confirm, ErrorText, Modal, fmtDate, today } from '../../components/ui'
 
 function when(eta: string | null) {
   if (!eta) return { text: 'No ETA set', tone: 'text-slate-500' }
@@ -20,6 +21,8 @@ export function ContainersWindow({
   initial,
   pendingFor,
   isManager,
+  isFounder,
+  onDeleted,
   onCheckIn,
   onReview,
   onClose,
@@ -28,13 +31,29 @@ export function ContainersWindow({
   initial: string | null
   pendingFor: (ref: string) => ContainerCheckin | undefined
   isManager: boolean
+  isFounder: boolean
+  onDeleted: (message: string) => void
   onCheckIn: (ref: string) => void
   onReview: (c: ContainerCheckin) => void
   onClose: () => void
 }) {
-  const [selected, setSelected] = useState(initial && containers.some((c) => c.ref === initial) ? initial : containers[0]?.ref ?? null)
+  const [selected, setSelected] = useState<string | null>(initial && containers.some((c) => c.ref === initial) ? initial : containers[0]?.ref ?? null)
   const c = containers.find((x) => x.ref === selected)
   const pending = c ? pendingFor(c.ref) : undefined
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState('')
+
+  // Founder only: removes the container and everything in it that is still on the way.
+  async function deleteContainer() {
+    if (!c) return
+    const { error } = await supabase!.from('machines').delete().eq('container_ref', c.ref).eq('status', 'en_route')
+    setConfirmDelete(false)
+    if (error) return setError(friendlyError(error))
+    if (pending) await supabase!.from('container_checkins').delete().eq('id', pending.id)
+    setError('')
+    setSelected(containers.find((x) => x.ref !== c.ref)?.ref ?? null)
+    onDeleted(`Container ${c.ref} deleted.`)
+  }
 
   return (
     <Modal title="🚢 Containers on the way" onClose={onClose} wide="xl">
@@ -120,6 +139,23 @@ export function ContainersWindow({
                   </tfoot>
                 </table>
               </div>
+              <ErrorText>{error}</ErrorText>
+              {isFounder && (
+                <div className="flex justify-end border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirmDelete(true)}>
+                    🗑️ Delete container
+                  </Button>
+                </div>
+              )}
+              {confirmDelete && (
+                <Confirm
+                  title={`Delete container ${c.ref}?`}
+                  message={`This removes the container and the ${c.total} item${c.total === 1 ? '' : 's'} still on the way in it. Use this for a container added by mistake or cancelled. Anything already checked into stock is not affected.`}
+                  confirmLabel="Delete container"
+                  onConfirm={deleteContainer}
+                  onCancel={() => setConfirmDelete(false)}
+                />
+              )}
               {!pending && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   When it lands, click <strong>Check in container</strong> and count what actually arrived.{' '}
