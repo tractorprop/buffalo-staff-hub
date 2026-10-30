@@ -18,6 +18,7 @@ export interface Model {
   fits_models?: string[] // for accessories: the machine models it fits
   category?: 'Construction' | 'Forestry' | 'Agriculture' | null // missing until 05-categories.sql is run
   price?: number | null // selling price excluding VAT; missing until 07-sales.sql is run
+  size_prices?: Record<string, number> // price per size (ex VAT) for models with sizes; missing until 08-size-prices.sql is run
   created_at: string
 }
 

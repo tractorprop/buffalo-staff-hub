@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { isMachine, modelLabel } from '../../lib/modelLabel'
-import { invoiceNumber, invoiceTotals, lineTotals, money } from '../../lib/money'
+import { invoiceNumber, invoiceTotals, lineTotals, money, priceOf } from '../../lib/money'
 import type { Invoice, InvoiceLine, Model } from '../../lib/types'
 import { Button, ErrorText, Field, inputClass, today } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
@@ -24,8 +24,10 @@ export function NewInvoice({ data }: { data: SalesData }) {
   const [lines, setLines] = useState<Line[]>([])
   const [category, setCategory] = useState<string>('Construction')
   const [machineId, setMachineId] = useState('')
-  const [picked, setPicked] = useState<Record<string, number>>({}) // accessory id -> qty
+  const [picked, setPicked] = useState<Record<string, number>>({}) // "accessoryId|size" -> qty
   const [includeMachine, setIncludeMachine] = useState(true)
+  const [machineSize, setMachineSize] = useState('')
+  const [sizeFor, setSizeFor] = useState<Model | null>(null) // item from "find any item" that needs a size
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<Invoice | null>(null)
@@ -39,29 +41,38 @@ export function NewInvoice({ data }: { data: SalesData }) {
     [models, category],
   )
   const machine = models.find((m) => m.id === machineId)
+  // One row per accessory, or per size for accessories that come in sizes.
   const accessories = useMemo(
     () =>
       models
         .filter((m) => m.kind === 'accessory' && (m.fits_models ?? []).includes(machineId))
-        .sort((a, b) => a.model_number.localeCompare(b.model_number)),
+        .sort((a, b) => a.model_number.localeCompare(b.model_number))
+        .flatMap((m) => (m.sizes.length ? m.sizes.map((size) => ({ m, size })) : [{ m, size: null as string | null }])),
     [models, machineId],
   )
+  const pickKey = (id: string, size: string | null) => `${id}|${size ?? ''}`
   const hasUncategorised = models.some((m) => isMachine(m) && !m.category)
 
   const describe = (m: Model) => (isMachine(m) && m.name ? `${m.name} (${m.model_number})` : modelLabel(m, models))
-  const toLine = (m: Model, qty = 1): Line => ({
-    key: nextKey++,
-    description: describe(m),
-    qty,
-    unit_price: m.price ?? 0,
-    vat_rate: 0.2,
-    noPrice: m.price == null,
-  })
+  const toLine = (m: Model, qty = 1, size: string | null = null): Line => {
+    const price = priceOf(m, size)
+    return {
+      key: nextKey++,
+      description: size ? `${describe(m)} ${size}` : describe(m),
+      qty,
+      unit_price: price ?? 0,
+      vat_rate: 0.2,
+      noPrice: price == null,
+    }
+  }
 
   function addSelection() {
     const add: Line[] = []
-    if (machine && includeMachine) add.push(toLine(machine))
-    for (const a of accessories) if (picked[a.id]) add.push(toLine(a, picked[a.id]))
+    if (machine && includeMachine) {
+      if (machine.sizes.length && !machineSize) return setError(`Choose a size for ${machine.model_number}.`)
+      add.push(toLine(machine, 1, machine.sizes.length ? machineSize : null))
+    }
+    for (const { m, size } of accessories) if (picked[pickKey(m.id, size)]) add.push(toLine(m, picked[pickKey(m.id, size)], size))
     if (!add.length) return setError('Tick the machine and/or some accessories to add.')
     setError('')
     setLines((ls) => [...ls, ...add])
@@ -165,6 +176,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
                   setMachineId(m.id)
                   setPicked({})
                   setIncludeMachine(true)
+                  setMachineSize('')
                 }}
                 className={`rounded-lg border p-2 text-left text-sm ${
                   machineId === m.id ? 'border-brand-600 bg-brand-50 dark:bg-slate-800' : 'border-slate-200 hover:border-brand-500 dark:border-slate-700'
@@ -172,7 +184,15 @@ export function NewInvoice({ data }: { data: SalesData }) {
               >
                 <div className="font-semibold">{m.model_number}</div>
                 <div className="truncate text-xs text-slate-500">{m.name}</div>
-                <div className="text-xs font-medium">{m.price != null ? `${money(m.price)} ex VAT` : <span className="text-amber-600">No price set</span>}</div>
+                <div className="text-xs font-medium">
+                  {m.sizes.length ? (
+                    <span className="text-slate-500">{m.sizes.length} sizes</span>
+                  ) : priceOf(m) != null ? (
+                    `${money(priceOf(m)!)} ex VAT`
+                  ) : (
+                    <span className="text-amber-600">No price set</span>
+                  )}
+                </div>
               </button>
             ))}
           </div>
@@ -182,35 +202,57 @@ export function NewInvoice({ data }: { data: SalesData }) {
               <label className="flex items-center gap-2 text-sm font-semibold">
                 <input type="checkbox" className="h-4 w-4" checked={includeMachine} onChange={(e) => setIncludeMachine(e.target.checked)} />
                 {describe(machine)}
-                <span className="ml-auto font-normal">{machine.price != null ? money(machine.price) : '–'}</span>
+                {machine.sizes.length > 0 && (
+                  <select
+                    aria-label="Size"
+                    className="rounded border border-slate-300 bg-white px-1 py-0.5 text-sm font-normal dark:border-slate-700 dark:bg-slate-950"
+                    value={machineSize}
+                    onChange={(e) => setMachineSize(e.target.value)}
+                  >
+                    <option value="">Size…</option>
+                    {machine.sizes.map((sz) => (
+                      <option key={sz}>{sz}</option>
+                    ))}
+                  </select>
+                )}
+                <span className="ml-auto font-normal">
+                  {priceOf(machine, machine.sizes.length ? machineSize : null) != null ? money(priceOf(machine, machine.sizes.length ? machineSize : null)!) : '–'}
+                </span>
               </label>
               <div className="mt-3 text-xs font-semibold uppercase text-slate-500">Accessories for {machine.model_number}</div>
               {accessories.length === 0 ? (
                 <p className="mt-1 text-sm text-slate-500">No accessories linked to this machine.</p>
               ) : (
                 <ul className="mt-1 max-h-72 space-y-0.5 overflow-y-auto">
-                  {accessories.map((a) => (
-                    <li key={a.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4"
-                        checked={!!picked[a.id]}
-                        onChange={(e) => setPicked((p) => ({ ...p, [a.id]: e.target.checked ? 1 : 0 }))}
-                      />
-                      <span className="min-w-0 flex-1 truncate">{modelLabel(a, models)}</span>
-                      {!!picked[a.id] && (
+                  {accessories.map(({ m: a, size }) => {
+                    const k = pickKey(a.id, size)
+                    const price = priceOf(a, size)
+                    return (
+                      <li key={k} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
                         <input
-                          type="number"
-                          min={1}
-                          aria-label="Quantity"
-                          className="w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center dark:border-slate-700 dark:bg-slate-950"
-                          value={picked[a.id]}
-                          onChange={(e) => setPicked((p) => ({ ...p, [a.id]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={!!picked[k]}
+                          onChange={(e) => setPicked((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }))}
                         />
-                      )}
-                      <span className="w-24 text-right">{a.price != null ? money(a.price) : <span className="text-amber-600">No price</span>}</span>
-                    </li>
-                  ))}
+                        <span className="min-w-0 flex-1 truncate">
+                          {modelLabel(a, models)}
+                          {size && <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold dark:bg-slate-800">{size}</span>}
+                        </span>
+                        {!!picked[k] && (
+                          <input
+                            type="number"
+                            min={1}
+                            aria-label="Quantity"
+                            className="w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center dark:border-slate-700 dark:bg-slate-950"
+                            value={picked[k]}
+                            onChange={(e) => setPicked((p) => ({ ...p, [k]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                          />
+                        )}
+                        <span className="w-24 text-right">{price != null ? money(price) : <span className="text-amber-600">No price</span>}</span>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
               <Button variant="primary" className="mt-3" onClick={addSelection}>
@@ -222,7 +264,36 @@ export function NewInvoice({ data }: { data: SalesData }) {
           <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
             <div className="min-w-56 flex-1">
               <div className="mb-1 text-xs font-semibold uppercase text-slate-500">Or find any item</div>
-              <ModelPicker models={models} value="" onChange={(id) => setLines((ls) => [...ls, toLine(models.find((m) => m.id === id)!)])} />
+              <ModelPicker
+                models={models}
+                value=""
+                onChange={(id) => {
+                  const m = models.find((x) => x.id === id)!
+                  if (m.sizes.length) setSizeFor(m)
+                  else setLines((ls) => [...ls, toLine(m)])
+                }}
+              />
+              {sizeFor && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg bg-brand-50 p-2 text-sm dark:bg-slate-800">
+                  <span className="font-medium">Which size of {modelLabel(sizeFor, models)}?</span>
+                  {sizeFor.sizes.map((sz) => (
+                    <Button
+                      key={sz}
+                      size="sm"
+                      onClick={() => {
+                        setLines((ls) => [...ls, toLine(sizeFor, 1, sz)])
+                        setSizeFor(null)
+                      }}
+                    >
+                      {sz}
+                      {priceOf(sizeFor, sz) != null && <span className="text-slate-500"> · {money(priceOf(sizeFor, sz)!)}</span>}
+                    </Button>
+                  ))}
+                  <button className="ml-auto text-xs underline" onClick={() => setSizeFor(null)}>
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
             <Button onClick={() => addCustom('Delivery')}>+ Delivery</Button>
             <Button onClick={() => addCustom()}>+ Custom line</Button>

@@ -1,4 +1,4 @@
-import type { InvoiceLine } from './types'
+import type { InvoiceLine, Model } from './types'
 
 const gbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' })
 
@@ -24,3 +24,12 @@ export function invoiceTotals(lines: InvoiceLine[]) {
 }
 
 export const invoiceNumber = (n: number) => `BM-${n}`
+
+// Price excluding VAT for a model, or for one of its sizes. null = not set yet.
+export function priceOf(m: Pick<Model, 'price' | 'size_prices' | 'sizes'>, size?: string | null): number | null {
+  if (m.sizes.length) {
+    const p = size ? m.size_prices?.[size] : undefined
+    return p == null ? null : Number(p)
+  }
+  return m.price == null ? null : Number(m.price)
+}
