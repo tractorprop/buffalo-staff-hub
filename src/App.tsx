@@ -8,6 +8,7 @@ import { StockEntryPage } from './pages/stock/StockEntryPage'
 import { TasksPage } from './pages/tasks/TasksPage'
 import { CalendarPage } from './pages/calendar/CalendarPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { SalesPage } from './pages/sales/SalesPage'
 
 function Gate() {
   const { session, profile, loading, signOut } = useAuth()
@@ -44,6 +45,7 @@ function Gate() {
         <Route path="machines" element={<MachinesPage />} />
         <Route path="stock" element={<StockEntryPage />} />
         <Route path="waitlist" element={<WaitlistPage />} />
+        <Route path="sales" element={<SalesPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="holidays" element={<Navigate to="/calendar" replace />} />

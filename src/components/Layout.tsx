@@ -9,6 +9,7 @@ const links = [
   { to: '/machines', label: 'Machines' },
   { to: '/stock', label: 'Stock entry' },
   { to: '/waitlist', label: 'Waiting list' },
+  { to: '/sales', label: 'Sales' },
   { to: '/tasks', label: 'Tasks' },
   { to: '/calendar', label: 'Calendar' },
 ]
