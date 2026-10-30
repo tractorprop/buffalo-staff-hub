@@ -9,10 +9,14 @@ import { Button, ErrorText, inputClass } from '../../components/ui'
 type Show = 'all' | 'machines' | 'accessories' | 'missing'
 
 // One priced row: a model, or one size of a model that comes in sizes.
+// A shared accessory (one part that fits several machines) appears under each machine,
+// with the same key, so its price box shows and saves the same value in every place.
 interface Entry {
   key: string
+  row: string // unique per row on screen
   model: Model
   size: string | null
+  under: string | null // machine this accessory row is listed under
 }
 
 const keyOf = (id: string, size: string | null) => `${id}|${size ?? ''}`
@@ -30,20 +34,22 @@ export function PriceList({ models }: { models: Model[] }) {
   // Machines first, then each machine's accessories underneath it; sized models get one row per size.
   const entries = useMemo(() => {
     const byNumber = (a: Model, b: Model) => a.model_number.localeCompare(b.model_number, undefined, { numeric: true })
-    const ordered: Model[] = []
+    const ordered: { model: Model; under: string | null }[] = []
     const seen = new Set<string>()
     for (const m of models.filter(isMachine).sort(byNumber)) {
-      ordered.push(m)
-      for (const a of models.filter((x) => x.kind === 'accessory' && (x.fits_models ?? [])[0] === m.id).sort(byNumber)) {
-        ordered.push(a)
+      ordered.push({ model: m, under: null })
+      for (const a of models.filter((x) => x.kind === 'accessory' && (x.fits_models ?? []).includes(m.id)).sort(byNumber)) {
+        ordered.push({ model: a, under: m.id })
         seen.add(a.id)
       }
     }
-    ordered.push(...models.filter((x) => x.kind === 'accessory' && !seen.has(x.id)).sort(byNumber))
+    for (const a of models.filter((x) => x.kind === 'accessory' && !seen.has(x.id)).sort(byNumber)) ordered.push({ model: a, under: null })
     const out: Entry[] = []
-    for (const m of ordered) {
-      if (m.sizes.length) for (const s of m.sizes) out.push({ key: keyOf(m.id, s), model: m, size: s })
-      else out.push({ key: keyOf(m.id, null), model: m, size: null })
+    for (const { model: m, under } of ordered) {
+      for (const size of m.sizes.length ? m.sizes : [null]) {
+        const key = keyOf(m.id, size)
+        out.push({ key, row: `${under ?? ''}/${key}`, model: m, size, under })
+      }
     }
     return out
   }, [models])
@@ -55,9 +61,11 @@ export function PriceList({ models }: { models: Model[] }) {
     if (show === 'missing' && priceOf(m, size) != null) return false
     return !q || `${modelLabel(m, models)} ${m.name ?? ''} ${size ?? ''}`.toLowerCase().includes(q)
   })
-  const missingCount = entries.filter((e) => priceOf(e.model, e.size) == null).length
+  // Count and save each item once, even when a shared accessory is listed under several machines.
+  const unique = entries.filter((e, i) => entries.findIndex((x) => x.key === e.key) === i)
+  const missingCount = unique.filter((e) => priceOf(e.model, e.size) == null).length
 
-  const changed = entries.filter((e) => {
+  const changed = unique.filter((e) => {
     const v = edits[e.key]
     if (v === undefined) return false
     const n = v.trim() === '' ? null : round2(parseFloat(v))
@@ -143,19 +151,23 @@ export function PriceList({ models }: { models: Model[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {rows.map(({ key, model: m, size }, i) => {
+            {rows.map(({ key, row, model: m, size, under }, i) => {
               const current = priceOf(m, size)
               const value = edits[key] ?? (current != null ? String(current) : '')
               const n = parseFloat(value)
-              const firstOfModel = !size || rows[i - 1]?.model.id !== m.id
+              const firstOfModel = !size || rows[i - 1]?.model.id !== m.id || rows[i - 1]?.under !== under
+              const sharedWith = (m.fits_models ?? []).length > 1
               return (
-                <tr key={key} className={isMachine(m) ? 'bg-slate-50/60 dark:bg-slate-800/30' : ''}>
+                <tr key={row} className={isMachine(m) ? 'bg-slate-50/60 dark:bg-slate-800/30' : ''}>
                   <td className={`px-3 py-1.5 ${isMachine(m) ? 'font-semibold' : 'pl-7'}`}>
                     {firstOfModel ? (
                       <>
                         {isMachine(m) ? '' : '🔧 '}
                         {modelLabel(m, models)}
                         {m.name && <span className="ml-2 font-normal text-slate-500">{m.name}</span>}
+                        {sharedWith && (
+                          <span className="block text-xs font-normal text-slate-500">One part for {(m.fits_models ?? []).length} machines: one price</span>
+                        )}
                       </>
                     ) : (
                       <span className="invisible">{modelLabel(m, models)}</span>
