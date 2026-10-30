@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import type { Container } from '../../lib/calendarData'
 import { addDays } from '../../lib/dates'
-import type { ContainerCheckin } from '../../lib/types'
+import type { ContainerCheckin, Model } from '../../lib/types'
+import { EditContainer } from './EditContainer'
 import { Button, Confirm, ErrorText, Modal, fmtDate, today } from '../../components/ui'
 
 function when(eta: string | null) {
@@ -18,21 +19,23 @@ function when(eta: string | null) {
 // Large window over the Machines page: every container on the way, and the chosen one's contents and actions.
 export function ContainersWindow({
   containers,
+  models,
   initial,
   pendingFor,
   isManager,
   isFounder,
-  onDeleted,
+  onMessage,
   onCheckIn,
   onReview,
   onClose,
 }: {
   containers: Container[]
+  models: Model[]
   initial: string | null
   pendingFor: (ref: string) => ContainerCheckin | undefined
   isManager: boolean
   isFounder: boolean
-  onDeleted: (message: string) => void
+  onMessage: (message: string) => void
   onCheckIn: (ref: string) => void
   onReview: (c: ContainerCheckin) => void
   onClose: () => void
@@ -41,6 +44,7 @@ export function ContainersWindow({
   const c = containers.find((x) => x.ref === selected)
   const pending = c ? pendingFor(c.ref) : undefined
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [error, setError] = useState('')
 
   // Founder only: removes the container and everything in it that is still on the way.
@@ -52,7 +56,7 @@ export function ContainersWindow({
     if (pending) await supabase!.from('container_checkins').delete().eq('id', pending.id)
     setError('')
     setSelected(containers.find((x) => x.ref !== c.ref)?.ref ?? null)
-    onDeleted(`Container ${c.ref} deleted.`)
+    onMessage(`Container ${c.ref} deleted.`)
   }
 
   return (
@@ -141,11 +145,27 @@ export function ContainersWindow({
               </div>
               <ErrorText>{error}</ErrorText>
               {isFounder && (
-                <div className="flex justify-end border-t border-slate-200 pt-3 dark:border-slate-700">
+                <div className="flex justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <Button size="sm" onClick={() => setEditing(true)}>
+                    ✏️ Edit contents / ETA
+                  </Button>
                   <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirmDelete(true)}>
                     🗑️ Delete container
                   </Button>
                 </div>
+              )}
+              {editing && (
+                <EditContainer
+                  containerRef={c.ref}
+                  eta={c.eta}
+                  models={models}
+                  hasPendingCheckin={!!pending}
+                  onClose={() => setEditing(false)}
+                  onSaved={(msg) => {
+                    setEditing(false)
+                    onMessage(msg)
+                  }}
+                />
               )}
               {confirmDelete && (
                 <Confirm

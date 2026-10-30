@@ -610,11 +610,12 @@ export function MachinesPage() {
       {showContainers !== false && (
         <ContainersWindow
           containers={containers}
+          models={data?.models ?? []}
           initial={showContainers}
           pendingFor={pendingFor}
           isManager={isManager}
           isFounder={isFounder}
-          onDeleted={(msg) => setToast(msg)}
+          onMessage={(msg) => setToast(msg)}
           onCheckIn={(ref) => {
             setShowContainers(false)
             setCheckIn(ref)
