@@ -40,7 +40,9 @@ export function ModelForm({
   )
   // For accessories the user types just the part ("Thumb"); the machine it fits is added when saving.
   const [modelNumber, setModelNumber] = useState(() => (model ? baseName(model.model_number, model.fits_models ?? [], models) : ''))
-  const [shared, setShared] = useState((model?.fits_models?.length ?? 0) > 1)
+  // Ticking several machines makes ONE accessory that fits them all (one price, one stock count),
+  // unless it's a different part for each machine.
+  const [shared, setShared] = useState(true)
   const [name, setName] = useState(model?.name ?? '')
   const [category, setCategory] = useState<string>(model ? model.category ?? '' : defaultCategory ?? '')
   const [sizes, setSizes] = useState((model?.sizes ?? []).join(', '))
@@ -71,8 +73,8 @@ export function ModelForm({
     if (kind === 'machine' && (category !== '' || model?.category !== undefined)) row.category = category || null
     // Only send the low-stock level once the database has that column (or one was typed).
     if (reorder !== '' || model?.reorder_level !== undefined) row.reorder_level = reorder === '' ? null : Math.max(0, parseInt(reorder) || 0)
-    // Accessories: name each one after the machine it fits. Several machines ticked
-    // (and not one shared part) = one accessory per machine.
+    // Accessories: name each one after the machine(s) it fits. Several machines ticked
+    // and "different part for each machine" chosen = one accessory per machine.
     const rows: Record<string, unknown>[] =
       kind === 'accessory'
         ? model || shared
@@ -177,8 +179,11 @@ export function ModelForm({
             </div>
             {!model && fits.length > 1 && (
               <label className="mt-2 flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={shared} onChange={(e) => setShared(e.target.checked)} />
-                <span>One identical part fits all of these machines (otherwise a separate accessory is added for each machine)</span>
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={!shared} onChange={(e) => setShared(!e.target.checked)} />
+                <span>
+                  <strong>Different part for each machine</strong> (e.g. a different size or price for each). Leave unticked if it's the same part:
+                  it's then one accessory with one price and one stock count for all {fits.length} machines.
+                </span>
               </label>
             )}
             {modelNumber.trim() && fits.length > 0 && (

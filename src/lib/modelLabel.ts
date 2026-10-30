@@ -25,3 +25,11 @@ export function labelFor(id: string, models: (Labelled & Pick<Model, 'id'>)[], s
 }
 
 export const isMachine = (m: Pick<Model, 'kind'> | undefined) => m?.kind !== 'accessory'
+
+// The part name an accessory was typed with, without the machine(s) added to it:
+// "Hydraulic thumb B1000" (fits B1000) -> "Hydraulic thumb".
+export function accessoryBaseName(m: Pick<Model, 'model_number' | 'fits_models'>, models: Pick<Model, 'id' | 'model_number'>[]) {
+  const nums = (m.fits_models ?? []).map((id) => models.find((x) => x.id === id)?.model_number).filter((n): n is string => !!n)
+  const suffix = ` ${nums.join('/')}`
+  return nums.length && m.model_number.toLowerCase().endsWith(suffix.toLowerCase()) ? m.model_number.slice(0, -suffix.length) : m.model_number
+}
