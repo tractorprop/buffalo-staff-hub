@@ -191,8 +191,8 @@ export function StockEntryPage() {
                       className={`rounded-lg border px-2 py-2 text-sm font-semibold ${
                         l.direction === d
                           ? d === 'out'
-                            ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                            : 'border-green-600 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                            ? 'border-green-600 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                            : 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
                           : 'border-slate-300 text-slate-500 dark:border-slate-700'
                       }`}
                     >
