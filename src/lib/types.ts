@@ -53,6 +53,11 @@ export interface WaitlistEntry {
   contacted_at: string | null
   created_by: string | null
   created_at: string
+  // Deposits (after 20-waitlist-deposits.sql)
+  deposit_paid?: boolean
+  deposit_amount?: number | null
+  deposit_date?: string | null
+  deposit_by?: string | null
 }
 
 export type Priority = 'Low' | 'Normal' | 'High'

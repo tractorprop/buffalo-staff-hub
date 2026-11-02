@@ -22,6 +22,7 @@ export function WaitlistHistory({ models }: { models: Model[] }) {
         let kind = 'edited'
         if (e.action === 'INSERT') [icon, title, kind] = ['➕', `Added: ${what}`, 'added']
         else if (e.action === 'DELETE') [icon, title, kind] = ['🗑️', `Removed: ${what}`, 'removed']
+        else if (!o?.deposit_paid && n?.deposit_paid) [icon, title, kind] = ['💷', `Deposit received: ${what}`, 'deposit']
         else if (!o?.contacted && n?.contacted) [icon, title, kind] = ['📞', `Contacted: ${what}`, 'contacted']
         else if (o?.contacted && !n?.contacted) [icon, title, kind] = ['↩️', `Moved back to waiting: ${what}`, 'edited']
         return [
@@ -48,6 +49,7 @@ export function WaitlistHistory({ models }: { models: Model[] }) {
       events={events}
       kinds={[
         ['added', '➕ Added'],
+        ['deposit', '💷 Deposits'],
         ['contacted', '📞 Contacted'],
         ['removed', '🗑️ Removed'],
         ['edited', '✏️ Changes'],
