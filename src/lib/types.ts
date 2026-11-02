@@ -182,3 +182,20 @@ export interface ShopifyLink {
   size: string | null
   title: string
 }
+
+// An after-sales query. The chat itself stays in WhatsApp: no customer details here.
+export type AfterSalesStatus = 'waiting' | 'diagnosing' | 'resolved'
+export interface AfterSalesQuery {
+  id: number
+  invoice_ref: string
+  model_id: string | null
+  issue: string
+  assignee_id: string | null
+  urgent: boolean
+  status: AfterSalesStatus
+  updates: { at: string; by: string | null; text: string }[]
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  resolved_at: string | null
+}

@@ -10,6 +10,7 @@ const links = [
   { to: '/stock', label: 'Stock entry' },
   { to: '/waitlist', label: 'Waiting list' },
   { to: '/sales', label: 'Sales' },
+  { to: '/aftersales', label: 'After-sales' },
   { to: '/tasks', label: 'Tasks' },
   { to: '/calendar', label: 'Calendar' },
 ]

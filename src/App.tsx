@@ -6,6 +6,7 @@ import { MachinesPage } from './pages/machines/MachinesPage'
 import { WaitlistPage } from './pages/waitlist/WaitlistPage'
 import { StockEntryPage } from './pages/stock/StockEntryPage'
 import { TasksPage } from './pages/tasks/TasksPage'
+import { AfterSalesPage } from './pages/aftersales/AfterSalesPage'
 import { CalendarPage } from './pages/calendar/CalendarPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { SalesPage } from './pages/sales/SalesPage'
@@ -46,6 +47,7 @@ function Gate() {
         <Route path="stock" element={<StockEntryPage />} />
         <Route path="waitlist" element={<WaitlistPage />} />
         <Route path="sales" element={<SalesPage />} />
+        <Route path="aftersales" element={<AfterSalesPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="holidays" element={<Navigate to="/calendar" replace />} />
