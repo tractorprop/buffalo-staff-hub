@@ -4,6 +4,7 @@ import type { Model, ProductionOrder } from '../../lib/types'
 import { labelFor } from '../../lib/modelLabel'
 import { Button, Confirm, ErrorText, Field, Modal, fmtDate, inputClass, today } from '../../components/ui'
 import { ProductionForm } from './ProductionForm'
+import { StockDocumentBox, moveDocumentToContainer } from './StockDocumentBox'
 
 const itemTotal = (o: ProductionOrder) => o.items.reduce((n, i) => n + i.qty, 0)
 
@@ -111,6 +112,7 @@ export function ProductionWindow({
                 </table>
               </div>
               {o.notes && <p className="text-sm text-slate-600 dark:text-slate-300">📝 {o.notes}</p>}
+              {isFounder && <StockDocumentBox productionId={o.id} />}
               <ErrorText>{error}</ErrorText>
               {isFounder && (
                 <div className="flex justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
@@ -193,6 +195,7 @@ function ShipOrder({ order, models, onClose, onShipped }: { order: ProductionOrd
       setBusy(false)
       return setError(friendlyError(error))
     }
+    await moveDocumentToContainer(order.id, containerRef.trim())
     const left = order.items.map((i, n) => ({ ...i, qty: i.qty - qty[n] })).filter((i) => i.qty > 0)
     const done = left.length
       ? await supabase!.from('production_orders').update({ items: left }).eq('id', order.id)

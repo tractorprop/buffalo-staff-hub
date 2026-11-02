@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import type { Machine, MachineStatus, Model, WaitlistEntry, ContainerCheckin, ProductionOrder } from '../../lib/types'
 import { ProductionWindow } from './ProductionWindow'
+import { cleanUpDocuments } from './StockDocumentBox'
 import {
   Button,
   Confirm,
@@ -232,6 +233,13 @@ export function MachinesPage() {
       },
     })
   }
+
+  // Founder: delete factory invoices once their container has arrived (keeps storage small).
+  const enRouteKey = (data?.machines ?? []).filter((m) => m.status === 'en_route').length
+  useEffect(() => {
+    if (isFounder && data) cleanUpDocuments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFounder, enRouteKey, data?.production.length])
 
   // Containers on the way: en-route machines grouped by container reference.
   const containers = useMemo(() => {

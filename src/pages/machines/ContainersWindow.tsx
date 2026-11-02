@@ -4,6 +4,7 @@ import type { Container } from '../../lib/calendarData'
 import { addDays } from '../../lib/dates'
 import type { ContainerCheckin, Model } from '../../lib/types'
 import { EditContainer } from './EditContainer'
+import { StockDocumentBox } from './StockDocumentBox'
 import { Button, Confirm, ErrorText, Modal, fmtDate, today } from '../../components/ui'
 
 function when(eta: string | null) {
@@ -143,6 +144,7 @@ export function ContainersWindow({
                   </tfoot>
                 </table>
               </div>
+              {isFounder && <StockDocumentBox containerRef={c.ref} />}
               <ErrorText>{error}</ErrorText>
               {isFounder && (
                 <div className="flex justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">

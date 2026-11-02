@@ -218,3 +218,13 @@ export interface ProductionOrder {
   created_at: string
   updated_at: string
 }
+
+// The factory invoice for a production order / container. Founder only.
+export interface StockDocument {
+  id: string
+  production_id: string | null
+  container_ref: string | null
+  path: string
+  name: string
+  uploaded_at: string
+}
