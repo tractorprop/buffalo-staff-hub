@@ -235,7 +235,7 @@ export function WaitlistPage() {
         </div>
       )}
 
-      {data && <WaitlistHistory models={data.models} />}
+      {isManager && data && <WaitlistHistory models={data.models} />}
 
       {form && data && <WaitlistForm models={data.models} entry={form.entry} defaultModelId={form.modelId} onClose={() => setForm(null)} />}
       {confirm && (

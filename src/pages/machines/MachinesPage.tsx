@@ -591,7 +591,7 @@ export function MachinesPage() {
         </>
       )}
 
-      {data && <MachineHistory models={data.models} />}
+      {isManager && data && <MachineHistory models={data.models} />}
 
       {modelForm && data && (
         <ModelForm
@@ -700,9 +700,11 @@ function MachineList({
           Edit
         </Button>
       )}
-      <Button size="sm" variant="ghost" onClick={() => onHistory(m)}>
-        History
-      </Button>
+      {isManager && (
+        <Button size="sm" variant="ghost" onClick={() => onHistory(m)}>
+          History
+        </Button>
+      )}
       {isFounder && (
         <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => onDelete(m)}>
           Delete

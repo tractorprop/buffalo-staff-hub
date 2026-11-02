@@ -151,7 +151,7 @@ export function TasksPage() {
       <div className="flex items-center gap-3">
         <h2 className="text-lg font-semibold">{heading}</h2>
         <div className="ml-auto flex rounded-lg border border-slate-300 p-0.5 dark:border-slate-700">
-          {[false, true].map((d) => (
+          {(isManager ? [false, true] : [false]).map((d) => (
             <button
               key={String(d)}
               onClick={() => setShowDone(d)}

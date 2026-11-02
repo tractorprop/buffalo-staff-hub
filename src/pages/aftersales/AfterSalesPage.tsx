@@ -73,13 +73,20 @@ export function AfterSalesPage() {
   // Every change goes through here, with a line added to the query's updates.
   async function change(q: AfterSalesQuery, fields: Partial<AfterSalesQuery>, note: string) {
     const updates = [...q.updates, { at: new Date().toISOString(), by: profile?.id ?? null, text: note }]
-    const { error } = await supabase!.from('aftersales').update({ ...fields, updates }).eq('id', q.id)
+    const { error } = await supabase!
+      .from('aftersales')
+      .update({ ...fields, updates })
+      .eq('id', q.id)
     if (error) setToast(friendlyError(error))
   }
 
   if (loading) return <Loading />
   if (error || !data)
-    return <ErrorText>{/aftersales/.test(error) ? 'After-sales is not switched on yet. The founder needs to run database/15-after-sales.sql in Supabase.' : error}</ErrorText>
+    return (
+      <ErrorText>
+        {/aftersales/.test(error) ? 'After-sales is not switched on yet. The founder needs to run database/15-after-sales.sql in Supabase.' : error}
+      </ErrorText>
+    )
 
   const staleMine = mine.filter(isStale).length
 
@@ -118,18 +125,25 @@ export function AfterSalesPage() {
                 ['resolved', 'Resolved'],
                 ['all', `All (${queries.length})`],
               ] as [Tab, string][]
-            ).map(([t, label]) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`rounded-full border px-3 py-1 text-sm font-semibold ${
-                  tab === t ? 'border-ink bg-ink text-white dark:border-brand-500 dark:bg-brand-500 dark:text-ink' : 'border-slate-300 dark:border-slate-700'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-            <input className={`${inputClass} sm:ml-auto sm:w-56`} placeholder="Search invoice number or issue…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            )
+              .filter(([t]) => isManager || t === 'open' || t === 'mine') // resolved queries are history: managers only
+              .map(([t, label]) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`rounded-full border px-3 py-1 text-sm font-semibold ${
+                    tab === t ? 'border-ink bg-ink text-white dark:border-brand-500 dark:bg-brand-500 dark:text-ink' : 'border-slate-300 dark:border-slate-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            <input
+              className={`${inputClass} sm:ml-auto sm:w-56`}
+              placeholder="Search invoice number or issue…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
           {shown.length === 0 ? (
@@ -156,7 +170,7 @@ export function AfterSalesPage() {
           )}
         </section>
       </div>
-      <IssuesByMachine queries={queries} models={data.models} onPick={(label) => (setTab('all'), setSearch(label))} />
+      {isManager && <IssuesByMachine queries={queries} models={data.models} onPick={(label) => (setTab('all'), setSearch(label))} />}
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
     </div>
   )
@@ -205,7 +219,14 @@ function NewQuery({ models, onSaved }: { models: Model[]; onSaved: (msg: string)
       <h2 className="font-semibold">+ Log a new query</h2>
       <label className="block">
         <span className="text-sm font-semibold">Invoice number *</span>
-        <input className={`${inputClass} mt-1`} required maxLength={60} placeholder="e.g. BM-1001 or Shopify #1052" value={invoiceRef} onChange={(e) => setInvoiceRef(e.target.value)} />
+        <input
+          className={`${inputClass} mt-1`}
+          required
+          maxLength={60}
+          placeholder="e.g. BM-1001 or Shopify #1052"
+          value={invoiceRef}
+          onChange={(e) => setInvoiceRef(e.target.value)}
+        />
         <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Also add this as a label on the WhatsApp chat, so anyone can find it.</span>
       </label>
       <div>
@@ -339,7 +360,12 @@ function QueryRow({
               </select>
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" className="h-4 w-4" checked={q.urgent} onChange={(e) => change(q, { urgent: e.target.checked }, e.target.checked ? 'Marked urgent' : 'No longer urgent')} />
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={q.urgent}
+                onChange={(e) => change(q, { urgent: e.target.checked }, e.target.checked ? 'Marked urgent' : 'No longer urgent')}
+              />
               Urgent
             </label>
             <span className="text-xs text-slate-500">
@@ -368,7 +394,13 @@ function QueryRow({
                 setNote('')
               }}
             >
-              <input className={inputClass} maxLength={500} placeholder="Add an update, e.g. part ordered…" value={note} onChange={(e) => setNote(e.target.value)} />
+              <input
+                className={inputClass}
+                maxLength={500}
+                placeholder="Add an update, e.g. part ordered…"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
               <Button type="submit" disabled={!note.trim()}>
                 Add
               </Button>
@@ -420,7 +452,9 @@ function IssuesByMachine({ queries, models, onPick }: { queries: AfterSalesQuery
   return (
     <section className="space-y-2 pt-2">
       <h2 className="text-lg font-semibold">📊 Issues by machine</h2>
-      <p className="text-sm text-slate-500 dark:text-slate-400">Every after-sales query ever logged, including resolved ones. Click a machine to see its queries.</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Every after-sales query ever logged, including resolved ones. Click a machine to see its queries.
+      </p>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white text-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">

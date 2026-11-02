@@ -42,7 +42,7 @@ const tabs = [
 ] as const
 
 export function SalesPage() {
-  const { isFounder } = useAuth()
+  const { isFounder, isManager } = useAuth()
   const { data, error, loading } = useLive<SalesData>(['models', 'invoices', 'company_settings'], load)
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') ?? 'new'
@@ -53,7 +53,7 @@ export function SalesPage() {
 
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
         {tabs
-          .filter((t) => t.key !== 'company' || isFounder)
+          .filter((t) => (t.key !== 'company' || isFounder) && (t.key !== 'history' || isManager))
           .map((t) => (
             <button
               key={t.key}
@@ -81,7 +81,7 @@ export function SalesPage() {
           Prices are now typed <strong>including VAT</strong>. A manager needs to run <code>database/09-prices-include-vat.sql</code> in Supabase
           once, which converts any prices already entered.
         </p>
-      ) : tab === 'history' ? (
+      ) : tab === 'history' && isManager ? (
         <InvoiceHistory data={data} />
       ) : tab === 'prices' ? (
         <PriceList models={data.models} />
