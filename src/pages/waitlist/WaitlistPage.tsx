@@ -7,6 +7,7 @@ import { personName, useProfiles } from '../../lib/useProfiles'
 import type { Model, WaitlistEntry } from '../../lib/types'
 import { Button, Confirm, Empty, ErrorText, Loading, Toast, fmtDate, inputClass } from '../../components/ui'
 import { WaitlistForm } from './WaitlistForm'
+import { WaitlistHistory } from './WaitlistHistory'
 import { modelLabel } from '../../lib/modelLabel'
 
 type Show = 'waiting' | 'contacted' | 'all'
@@ -233,6 +234,8 @@ export function WaitlistPage() {
           ))}
         </div>
       )}
+
+      {data && <WaitlistHistory models={data.models} />}
 
       {form && data && <WaitlistForm models={data.models} entry={form.entry} defaultModelId={form.modelId} onClose={() => setForm(null)} />}
       {confirm && (

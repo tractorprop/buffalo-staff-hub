@@ -7,6 +7,7 @@ import { personName, useProfiles } from '../../lib/useProfiles'
 import type { Model, Task } from '../../lib/types'
 import { Button, Confirm, Empty, ErrorText, Loading, Toast, fmtDate, today } from '../../components/ui'
 import { TaskForm } from './TaskForm'
+import { TaskHistory } from './TaskHistory'
 
 interface Data {
   tasks: Task[]
@@ -241,6 +242,8 @@ export function TasksPage() {
           onClose={() => setForm(null)}
         />
       )}
+      {isManager && data && <TaskHistory tasks={data.tasks} />}
+
       {confirm && (
         <Confirm
           title="Delete task?"

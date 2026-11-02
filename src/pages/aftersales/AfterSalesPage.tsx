@@ -48,7 +48,7 @@ const daysSince = (at: string) => Math.floor((Date.now() - new Date(at).getTime(
 // Open queries with no update for two weeks: staff are asked whether it's been resolved.
 export const isStale = (q: Pick<AfterSalesQuery, 'status' | 'updated_at'>) => q.status !== 'resolved' && daysSince(q.updated_at) >= STALE_DAYS
 
-type Tab = 'open' | 'mine' | 'resolved'
+type Tab = 'open' | 'mine' | 'resolved' | 'all'
 
 export function AfterSalesPage() {
   const { profile, isManager } = useAuth()
@@ -64,7 +64,7 @@ export function AfterSalesPage() {
   const shown = useMemo(() => {
     const s = search.trim().toLowerCase()
     return queries
-      .filter((q) => (tab === 'resolved' ? q.status === 'resolved' : q.status !== 'resolved'))
+      .filter((q) => tab === 'all' || (tab === 'resolved' ? q.status === 'resolved' : q.status !== 'resolved'))
       .filter((q) => tab !== 'mine' || q.assignee_id === profile?.id)
       .filter((q) => !s || `${q.invoice_ref} ${q.issue} ${labelFor(q.model_id ?? '', data?.models ?? [])}`.toLowerCase().includes(s))
       .sort((a, b) => Number(isStale(b)) - Number(isStale(a)) || Number(b.urgent) - Number(a.urgent) || b.created_at.localeCompare(a.created_at))
@@ -116,6 +116,7 @@ export function AfterSalesPage() {
                 ['open', `Open (${queries.filter((q) => q.status !== 'resolved').length})`],
                 ['mine', `Flagged to me (${mine.length})`],
                 ['resolved', 'Resolved'],
+                ['all', `All (${queries.length})`],
               ] as [Tab, string][]
             ).map(([t, label]) => (
               <button
@@ -155,6 +156,7 @@ export function AfterSalesPage() {
           )}
         </section>
       </div>
+      <IssuesByMachine queries={queries} models={data.models} onPick={(label) => (setTab('all'), setSearch(label))} />
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
     </div>
   )
@@ -395,5 +397,63 @@ function QueryRow({
         </div>
       )}
     </li>
+  )
+}
+
+// Which machines cause the most after-sales queries (all time, resolved ones included).
+function IssuesByMachine({ queries, models, onPick }: { queries: AfterSalesQuery[]; models: Model[]; onPick: (label: string) => void }) {
+  const rows = useMemo(() => {
+    const m = new Map<string, { total: number; open: number; urgent: number; last: string }>()
+    for (const q of queries) {
+      const k = q.model_id ?? ''
+      const r = m.get(k) ?? { total: 0, open: 0, urgent: 0, last: q.created_at }
+      r.total++
+      if (q.status !== 'resolved') r.open++
+      if (q.urgent) r.urgent++
+      if (q.created_at > r.last) r.last = q.created_at
+      m.set(k, r)
+    }
+    return [...m.entries()].map(([id, r]) => ({ id, label: id ? labelFor(id, models) : 'No machine given', ...r })).sort((a, b) => b.total - a.total)
+  }, [queries, models])
+  if (!rows.length) return null
+  const max = rows[0].total
+  return (
+    <section className="space-y-2 pt-2">
+      <h2 className="text-lg font-semibold">📊 Issues by machine</h2>
+      <p className="text-sm text-slate-500 dark:text-slate-400">Every after-sales query ever logged, including resolved ones. Click a machine to see its queries.</p>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white text-sm dark:border-slate-800 dark:bg-slate-900">
+        <table className="w-full">
+          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+            <tr>
+              <th className="px-3 py-2">Machine</th>
+              <th className="px-3 py-2">Queries</th>
+              <th className="px-3 py-2 text-right">Still open</th>
+              <th className="px-3 py-2 text-right">Urgent</th>
+              <th className="px-3 py-2 text-right">Latest</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td className="px-3 py-2">
+                  <button className="font-semibold hover:underline" onClick={() => onPick(r.id ? r.label : '')}>
+                    {r.label}
+                  </button>
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 rounded-full bg-brand-500" style={{ width: `${Math.max(6, (r.total / max) * 160)}px` }} />
+                    <span className="font-semibold">{r.total}</span>
+                  </div>
+                </td>
+                <td className={`px-3 py-2 text-right ${r.open ? 'font-semibold text-red-600 dark:text-red-400' : ''}`}>{r.open}</td>
+                <td className="px-3 py-2 text-right">{r.urgent}</td>
+                <td className="px-3 py-2 text-right text-slate-500">{fmtDate(r.last)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }

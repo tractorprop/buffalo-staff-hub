@@ -22,7 +22,7 @@ import { MachineForm } from './MachineForm'
 import { History } from './History'
 import { ContainerForm } from './ContainerForm'
 import { CheckInContainer } from './CheckInContainer'
-import { ArrivalHistory } from './ArrivalHistory'
+import { MachineHistory } from './MachineHistory'
 import { ReviewCheckin } from './ReviewCheckin'
 import { ContainersWindow } from './ContainersWindow'
 import { StockOverview } from '../../components/StockOverview'
@@ -591,7 +591,7 @@ export function MachinesPage() {
         </>
       )}
 
-      {data && <ArrivalHistory models={data.models} />}
+      {data && <MachineHistory models={data.models} />}
 
       {modelForm && data && (
         <ModelForm
