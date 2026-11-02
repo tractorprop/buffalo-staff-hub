@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
-import { isMachine, modelLabel } from '../../lib/modelLabel'
+import { invoiceDescription, isMachine, modelLabel } from '../../lib/modelLabel'
 import { invoiceNumber, invoiceTotals, lineTotals, money, priceOf } from '../../lib/money'
 import type { Invoice, InvoiceLine, Model } from '../../lib/types'
 import { Button, ErrorText, Field, inputClass, today } from '../../components/ui'
@@ -55,12 +55,14 @@ export function NewInvoice({ data }: { data: SalesData }) {
   const pickKey = (id: string, size: string | null) => `${id}|${size ?? ''}`
   const hasUncategorised = models.some((m) => isMachine(m) && !m.category)
 
-  const describe = (m: Model) => (isMachine(m) && m.name ? `${m.name} (${m.model_number})` : modelLabel(m, models))
+  const describe = (m: Model) => invoiceDescription(m, models)
   const toLine = (m: Model, qty = 1, size: string | null = null): Line => {
     const price = priceOf(m, size)
     return {
       key: nextKey++,
-      description: size ? `${describe(m)} ${size}` : describe(m),
+      description: invoiceDescription(m, models, size),
+      model_id: m.id,
+      size,
       qty,
       unit_price_inc: price ?? 0,
       vat_rate: 0.2,
@@ -112,7 +114,13 @@ export function NewInvoice({ data }: { data: SalesData }) {
     if (!win) return setError('Your browser blocked the invoice window. Allow pop-ups for this site and try again.')
     setBusy(true)
     const clean: InvoiceLine[] = [
-      ...lines.map(({ description, qty, unit_price_inc, vat_rate }) => ({ description: description.trim(), qty, unit_price_inc, vat_rate })),
+      ...lines.map(({ description, qty, unit_price_inc, vat_rate, model_id, size }) => ({
+        description: description.trim(),
+        qty,
+        unit_price_inc,
+        vat_rate,
+        ...(model_id ? { model_id, size: size ?? null } : {}),
+      })),
       ...extras,
     ]
     const { data: inv, error } = await supabase

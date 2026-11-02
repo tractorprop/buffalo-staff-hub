@@ -24,4 +24,10 @@ export function labelFor(id: string, models: (Labelled & Pick<Model, 'id'>)[], s
   )
 }
 
+// How an item is written on an invoice line, e.g. "Mini Digger (B600)" or "Thumb B600 Large".
+export function invoiceDescription(m: Model, models: Model[], size?: string | null) {
+  const base = isMachine(m) && m.name ? `${m.name} (${m.model_number})` : modelLabel(m, models)
+  return size ? `${base} ${size}` : base
+}
+
 export const isMachine = (m: Pick<Model, 'kind'> | undefined) => m?.kind !== 'accessory'

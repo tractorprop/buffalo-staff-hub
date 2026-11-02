@@ -135,6 +135,8 @@ export interface InvoiceLine {
   unit_price_inc?: number // price per item INCLUDING 20% VAT (how prices are entered)
   unit_price?: number // older invoices only: price per item excluding VAT
   vat_rate: number // 0.2, or 0 for no VAT (customer then pays the price without VAT)
+  model_id?: string // the stock item this line is for (newer invoices), so the warehouse can send it out
+  size?: string | null
 }
 
 // Invoices never store customer details.
