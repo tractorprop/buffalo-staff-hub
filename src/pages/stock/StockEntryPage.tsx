@@ -546,9 +546,9 @@ export function StockEntryPage() {
               </div>
             )
           })}
-          {!invoice && (
+          {(!invoice || invoice.order) && (
             <Button size="sm" onClick={() => setLines((ls) => [...ls, newLine()])}>
-              + Add another model
+              {invoice ? '+ Add an item not on the order' : '+ Add another model'}
             </Button>
           )}
           <ErrorText>{formError}</ErrorText>
