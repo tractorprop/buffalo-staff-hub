@@ -169,7 +169,8 @@ export interface ContainerCheckin {
 
 // A Shopify order waiting to be packed. Only the order number, date and items are kept (no customer details).
 export interface ShopifyOrder {
-  id: number
+  id: number // rounded in the browser (Shopify ids are too long): use id_text to find the row
+  id_text: string
   name: string // e.g. #1052
   ordered_at: string
   items: { key: string; title: string; qty: number }[]

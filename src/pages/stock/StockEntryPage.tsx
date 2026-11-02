@@ -76,7 +76,7 @@ async function loadAll(days: number) {
     supabase!.from('models').select('*').order('model_number'),
     supabase!.from('machines').select('model_id, size').eq('status', 'in_stock'),
     supabase!.from('audit_log').select('*').eq('table_name', 'machines').gte('changed_at', since).order('changed_at', { ascending: false }).limit(5000),
-    supabase!.from('shopify_orders').select('*').order('ordered_at', { ascending: false }).limit(100),
+    supabase!.from('shopify_orders').select('*, id_text:id::text').order('ordered_at', { ascending: false }).limit(100),
     supabase!.from('shopify_links').select('*'),
     supabase!.from('machines').select('stock_reference').like('stock_reference', 'Shopify #%'),
   ])
@@ -434,7 +434,7 @@ export function StockEntryPage() {
                                 Load
                               </Button>
                               {isManager && (
-                                <button className="px-1 text-slate-400 hover:text-red-600" title="Remove from list (e.g. cancelled)" onClick={() => setRemoveOrder(o)}>
+                                <button type="button" className="px-1 text-slate-400 hover:text-red-600" title="Remove from list (e.g. cancelled)" onClick={() => setRemoveOrder(o)}>
                                   ×
                                 </button>
                               )}
@@ -655,7 +655,7 @@ export function StockEntryPage() {
           message="Use this for an order that was cancelled or won't be sent. Stock doesn't change."
           confirmLabel="Remove"
           onConfirm={async () => {
-            const { error } = await supabase!.from('shopify_orders').delete().eq('id', removeOrder.id)
+            const { error } = await supabase!.from('shopify_orders').delete().eq('id', removeOrder.id_text)
             if (error) setFormError(friendlyError(error))
             setRemoveOrder(null)
             reload()
