@@ -6,19 +6,7 @@ import { useAuth } from '../../auth/AuthProvider'
 import type { Machine, MachineStatus, Model, WaitlistEntry, ContainerCheckin, ProductionOrder } from '../../lib/types'
 import { ProductionWindow } from './ProductionWindow'
 import { cleanUpDocuments } from './StockDocumentBox'
-import {
-  Button,
-  Confirm,
-  CountPill,
-  Empty,
-  ErrorText,
-  Loading,
-  StatusBadge,
-  Toast,
-  fmtDate,
-  inputClass,
-  today,
-} from '../../components/ui'
+import { Button, Confirm, CountPill, Empty, ErrorText, Loading, StatusBadge, Toast, fmtDate, inputClass, today } from '../../components/ui'
 import { ModelForm } from './ModelForm'
 import { MachineForm } from './MachineForm'
 import { History } from './History'
@@ -114,9 +102,7 @@ export function MachinesPage() {
           r.model.model_number.toLowerCase().includes(q) ||
           (r.model.name ?? '').toLowerCase().includes(q) ||
           (r.model.fits_models ?? []).some((id) => `${numberOf(id)?.model_number} ${numberOf(id)?.name ?? ''}`.toLowerCase().includes(q)) ||
-          r.machines.some((m) =>
-            [m.serial_number, m.container_ref, m.location, m.notes].some((v) => (v ?? '').toLowerCase().includes(q)),
-          ),
+          r.machines.some((m) => [m.serial_number, m.container_ref, m.location, m.notes].some((v) => (v ?? '').toLowerCase().includes(q))),
       )
       .sort((a, b) =>
         sort === 'in_stock'
@@ -139,8 +125,8 @@ export function MachinesPage() {
   const linkedMachine = linked && (isMachine(linked) ? linked : data?.models.find((x) => x.id === linked.fits_models?.[0]))
   const category =
     params.get('cat') ??
-    (linkedMachine ? linkedMachine.category ?? (categoriesInUse ? 'none' : 'all') : null) ??
-    (categoriesInUse ? categories.find((c) => catCount(c) > 0) ?? 'all' : 'all')
+    (linkedMachine ? (linkedMachine.category ?? (categoriesInUse ? 'none' : 'all')) : null) ??
+    (categoriesInUse ? (categories.find((c) => catCount(c) > 0) ?? 'all') : 'all')
   const inCategory = (m: Model) => category === 'all' || (category === 'none' ? !m.category : m.category === category)
   const searching = search.trim() !== ''
   const shownMachineRows = searching ? machineRows : machineRows.filter((r) => inCategory(r.model))
@@ -224,11 +210,7 @@ export function MachinesPage() {
       run: async () => {
         const { error } = await supabase!.from('models').delete().eq('id', model.id)
         if (error)
-          setToast(
-            error.code === '23503'
-              ? `${model.model_number} still has machines or waiting customers, so it can't be deleted.`
-              : friendlyError(error),
-          )
+          setToast(error.code === '23503' ? `${model.model_number} still has machines or waiting customers, so it can't be deleted.` : friendlyError(error))
         setConfirm(null)
       },
     })
@@ -257,7 +239,10 @@ export function MachinesPage() {
           const label = modelLabel(model, data.models, m.size)
           counts.set(label, (counts.get(label) ?? 0) + 1)
         }
-        const etas = machines.map((m) => m.eta).filter(Boolean).sort() as string[]
+        const etas = machines
+          .map((m) => m.eta)
+          .filter(Boolean)
+          .sort() as string[]
         return { ref, eta: etas[0] ?? null, total: machines.length, contents: [...counts.entries()] }
       })
       .sort((a, b) => (a.eta ?? '9999').localeCompare(b.eta ?? '9999'))
@@ -271,134 +256,141 @@ export function MachinesPage() {
   ]
 
   function renderRow(r: Row) {
-            const isOpen = open.has(r.model.id) || (search.trim() !== '' && rows.length <= 3)
-            const shown = filter === 'all' ? r.machines : r.machines.filter((m) => m.status === filter)
-            return (
-              <li key={r.model.id} id={`model-${r.model.id}`} className="scroll-mt-20 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                <button onClick={() => toggle(r.model.id)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-left">
-                  <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="font-semibold">{modelLabel(r.model, data?.models ?? [])}</span>
-                    {r.model.name && <span className="ml-2 text-slate-500 dark:text-slate-400">{r.model.name}</span>}
-                    {r.model.kind === 'accessory' && (r.model.fits_models ?? []).length > 0 && (
-                      <span className="ml-2 text-xs text-slate-400">
-                        Fits {(r.model.fits_models ?? []).map((id) => data?.models.find((m) => m.id === id)?.model_number).filter(Boolean).join(', ')}
-                      </span>
-                    )}
-                    {r.model.sizes.length > 0 && (
-                      <span className="ml-2 text-xs text-slate-400">Sizes: {r.model.sizes.join(', ')}</span>
-                    )}
-                  </span>
-                  <span className="flex flex-wrap gap-1.5">
-                    <CountPill n={r.inStock} label="in stock" tone="green" />
-                    <CountPill n={r.enRoute} label="en route" tone="amber" />
-                    {r.inProduction > 0 && <CountPill n={r.inProduction} label="in production" tone="violet" />}
-                    <CountPill n={r.sold} label="sold" tone="grey" />
-                    <CountPill n={r.waiting.length} label="waiting" tone="blue" />
-                  </span>
-                </button>
+    const isOpen = open.has(r.model.id) || (search.trim() !== '' && rows.length <= 3)
+    const shown = filter === 'all' ? r.machines : r.machines.filter((m) => m.status === filter)
+    return (
+      <li
+        key={r.model.id}
+        id={`model-${r.model.id}`}
+        className="scroll-mt-20 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+      >
+        <button onClick={() => toggle(r.model.id)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-left">
+          <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
+          <span className="min-w-0 flex-1">
+            <span className="font-semibold">{modelLabel(r.model, data?.models ?? [])}</span>
+            {r.model.name && <span className="ml-2 text-slate-500 dark:text-slate-400">{r.model.name}</span>}
+            {r.model.kind === 'accessory' && (r.model.fits_models ?? []).length > 0 && (
+              <span className="ml-2 text-xs text-slate-400">
+                Fits{' '}
+                {(r.model.fits_models ?? [])
+                  .map((id) => data?.models.find((m) => m.id === id)?.model_number)
+                  .filter(Boolean)
+                  .join(', ')}
+              </span>
+            )}
+            {r.model.sizes.length > 0 && <span className="ml-2 text-xs text-slate-400">Sizes: {r.model.sizes.join(', ')}</span>}
+          </span>
+          <span className="flex flex-wrap gap-1.5">
+            <CountPill n={r.inStock} label="in stock" tone="green" />
+            <CountPill n={r.enRoute} label="en route" tone="amber" />
+            {r.inProduction > 0 && <CountPill n={r.inProduction} label="in production" tone="violet" />}
+            <CountPill n={r.sold} label="sold" tone="grey" />
+            <CountPill n={r.waiting.length} label="waiting" tone="blue" />
+          </span>
+        </button>
 
-                {isOpen && (
-                  <div className="space-y-4 border-t border-slate-200 px-4 py-4 dark:border-slate-800">
-                    {r.model.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{r.model.notes}</p>}
+        {isOpen && (
+          <div className="space-y-4 border-t border-slate-200 px-4 py-4 dark:border-slate-800">
+            {r.model.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{r.model.notes}</p>}
 
-                    {isFounder && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
-                          Edit {r.model.kind === 'accessory' ? 'accessory' : 'model'}
-                        </Button>
-                        {r.model.kind !== 'accessory' && (
-                          <Button size="sm" onClick={() => setModelForm({ accessoryFor: r.model.id })}>
-                            + Add accessory for this machine
-                          </Button>
-                        )}
-                        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => askDeleteModel(r.model)}>
-                          Delete
-                        </Button>
-                      </div>
-                    )}
-
-                    {shown.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No {filter === 'all' ? '' : filter === 'in_stock' ? 'in-stock ' : filter === 'en_route' ? 'en-route ' : 'sold '}
-                        machines for this model.
-                      </p>
-                    ) : (
-                      <MachineList
-                        machines={shown}
-                        hasSizes={r.model.sizes.length > 0}
-                        isManager={isManager}
-                        isFounder={isFounder}
-                        onEdit={(m) => setMachineForm({ machine: m })}
-                        onHistory={(m) => setHistory({ machine: m, title: modelLabel(r.model, data?.models ?? [], m.size) })}
-                        onArrived={(m) => setStatus(m, 'in_stock')}
-                        onSold={(m) => setStatus(m, 'sold')}
-                        onDelete={(m) => askDeleteMachine(m, r.model.model_number)}
-                      />
-                    )}
-
-                    {r.model.kind !== 'accessory' && (() => {
-                      const accs = (data?.models ?? []).filter((m) => m.kind === 'accessory' && (m.fits_models ?? []).includes(r.model.id))
-                      if (!accs.length) return null
-                      return (
-                        <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-                          <div className="mb-1 font-medium">Accessories for this machine</div>
-                          <ul className="flex flex-wrap gap-2">
-                            {accs.map((a) => (
-                              <li key={a.id}>
-                                <button
-                                  onClick={() => {
-                                    setOpenAcc((prev) => new Set(prev).add(r.model.id))
-                                    openModel(a.id)
-                                  }}
-                                  className="rounded-full border border-slate-300 px-2.5 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-                                >
-                                  {a.model_number}
-                                  {a.name && <span className="text-slate-500"> {a.name}</span>}
-                                  <span className={`ml-1.5 font-semibold ${inStockOf(a.id) ? 'text-green-700 dark:text-green-400' : 'text-slate-400'}`}>
-                                    {inStockOf(a.id)}
-                                  </span>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )
-                    })()}
-
-                    <div className="rounded-lg bg-sky-50 p-3 text-sm dark:bg-sky-950/40">
-                      {r.waiting.length === 0 ? (
-                        <span className="text-slate-600 dark:text-slate-300">No customers waiting for this model.</span>
-                      ) : (
-                        <>
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-medium">
-                              {r.waiting.length} customer{r.waiting.length === 1 ? '' : 's'} waiting
-                            </span>
-                            <Link to={`/waitlist?model=${r.model.id}`} className="font-medium text-sky-700 underline dark:text-sky-300">
-                              Open waiting list →
-                            </Link>
-                          </div>
-                          <ul className="mt-2 space-y-1">
-                            {r.waiting.map((w) => (
-                              <li key={w.id} className="flex flex-wrap gap-x-3">
-                                <span>{w.customer_name}</span>
-                                {w.size_wanted && <span className="text-slate-500">wants {w.size_wanted}</span>}
-                                {w.phone && (
-                                  <a href={`tel:${w.phone}`} className="text-sky-700 underline dark:text-sky-300">
-                                    {w.phone}
-                                  </a>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                    </div>
-                  </div>
+            {isFounder && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
+                  Edit {r.model.kind === 'accessory' ? 'accessory' : 'model'}
+                </Button>
+                {r.model.kind !== 'accessory' && (
+                  <Button size="sm" onClick={() => setModelForm({ accessoryFor: r.model.id })}>
+                    + Add accessory for this machine
+                  </Button>
                 )}
-              </li>
-            )
+                <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => askDeleteModel(r.model)}>
+                  Delete
+                </Button>
+              </div>
+            )}
+
+            {shown.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No {filter === 'all' ? '' : filter === 'in_stock' ? 'in-stock ' : filter === 'en_route' ? 'en-route ' : 'sold '}
+                machines for this model.
+              </p>
+            ) : (
+              <MachineList
+                machines={shown}
+                hasSizes={r.model.sizes.length > 0}
+                isManager={isManager}
+                isFounder={isFounder}
+                onEdit={(m) => setMachineForm({ machine: m })}
+                onHistory={(m) => setHistory({ machine: m, title: modelLabel(r.model, data?.models ?? [], m.size) })}
+                onArrived={(m) => setStatus(m, 'in_stock')}
+                onSold={(m) => setStatus(m, 'sold')}
+                onDelete={(m) => askDeleteMachine(m, r.model.model_number)}
+              />
+            )}
+
+            {r.model.kind !== 'accessory' &&
+              (() => {
+                const accs = (data?.models ?? []).filter((m) => m.kind === 'accessory' && (m.fits_models ?? []).includes(r.model.id))
+                if (!accs.length) return null
+                return (
+                  <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                    <div className="mb-1 font-medium">Accessories for this machine</div>
+                    <ul className="flex flex-wrap gap-2">
+                      {accs.map((a) => (
+                        <li key={a.id}>
+                          <button
+                            onClick={() => {
+                              setOpenAcc((prev) => new Set(prev).add(r.model.id))
+                              openModel(a.id)
+                            }}
+                            className="rounded-full border border-slate-300 px-2.5 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                          >
+                            {a.model_number}
+                            {a.name && <span className="text-slate-500"> {a.name}</span>}
+                            <span className={`ml-1.5 font-semibold ${inStockOf(a.id) ? 'text-green-700 dark:text-green-400' : 'text-slate-400'}`}>
+                              {inStockOf(a.id)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })()}
+
+            <div className="rounded-lg bg-sky-50 p-3 text-sm dark:bg-sky-950/40">
+              {r.waiting.length === 0 ? (
+                <span className="text-slate-600 dark:text-slate-300">No customers waiting for this model.</span>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">
+                      {r.waiting.length} customer{r.waiting.length === 1 ? '' : 's'} waiting
+                    </span>
+                    <Link to={`/waitlist?model=${r.model.id}`} className="font-medium text-sky-700 underline dark:text-sky-300">
+                      Open waiting list →
+                    </Link>
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {r.waiting.map((w) => (
+                      <li key={w.id} className="flex flex-wrap gap-x-3">
+                        <span>{w.customer_name}</span>
+                        {w.size_wanted && <span className="text-slate-500">wants {w.size_wanted}</span>}
+                        {w.phone && (
+                          <a href={`tel:${w.phone}`} className="text-sky-700 underline dark:text-sky-300">
+                            {w.phone}
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </li>
+    )
   }
 
   return (
@@ -465,7 +457,8 @@ export function MachinesPage() {
           <span>
             <span className="block text-lg font-bold">Containers on the way</span>
             <span className="text-sm">
-              <strong>{containers.length}</strong> container{containers.length === 1 ? '' : 's'} · <strong>{containers.reduce((n, c) => n + c.total, 0)}</strong> items
+              <strong>{containers.length}</strong> container{containers.length === 1 ? '' : 's'} ·{' '}
+              <strong>{containers.reduce((n, c) => n + c.total, 0)}</strong> items
               {containers[0].eta && <> · next ETA {fmtDate(containers[0].eta)}</>}
               {(data?.checkins.length ?? 0) > 0 && <> · ⏳ {data!.checkins.length} waiting for approval</>}
             </span>
@@ -488,7 +481,10 @@ export function MachinesPage() {
                   <strong>{data.production.length}</strong> order{data.production.length === 1 ? '' : 's'} ·{' '}
                   <strong>{data.production.reduce((n, o) => n + o.items.reduce((a, i) => a + i.qty, 0), 0)}</strong> items
                   {(() => {
-                    const next = data.production.map((o) => o.eta).filter(Boolean).sort()[0]
+                    const next = data.production
+                      .map((o) => o.eta)
+                      .filter(Boolean)
+                      .sort()[0]
                     return next ? <> · next ETA {fmtDate(next)}</> : null
                   })()}
                 </>
@@ -547,12 +543,7 @@ export function MachinesPage() {
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          className={inputClass}
-          placeholder="Search model, name, serial number, container…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <input className={inputClass} placeholder="Search model, name, serial number, container…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className={`${inputClass} sm:w-56`} value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
           <option value="model">Sort: Model number</option>
           <option value="in_stock">Sort: Most in stock</option>
@@ -574,7 +565,13 @@ export function MachinesPage() {
         <>
           <section className="space-y-2">
             <h2 className="text-lg font-semibold">
-              {searching ? 'Machines matching your search' : category === 'all' ? 'All machines' : category === 'none' ? 'Machines with no category' : `${category} machines`}
+              {searching
+                ? 'Machines matching your search'
+                : category === 'all'
+                  ? 'All machines'
+                  : category === 'none'
+                    ? 'Machines with no category'
+                    : `${category} machines`}
             </h2>
             {shownMachineRows.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -591,46 +588,44 @@ export function MachinesPage() {
             )}
           </section>
 
-          {searching ? (
-            accessoryRows.length > 0 && (
-              <section className="space-y-2">
-                <h2 className="text-lg font-semibold">Accessories matching your search</h2>
-                <ul className="space-y-2">{accessoryRows.map(renderRow)}</ul>
-              </section>
-            )
-          ) : (
-            (accessoryGroups.length > 0 || unlinkedAccessories.length > 0) && (
-              <section className="space-y-2">
-                <h2 className="text-lg font-semibold">Accessories</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Click a machine to see its accessories.</p>
-                <ul className="space-y-2">
-                  {[
-                    ...accessoryGroups.map((g) => ({ key: g.machine.id, title: g.machine.model_number, sub: g.machine.name, rows: g.rows })),
-                    ...(unlinkedAccessories.length ? [{ key: 'unlinked', title: 'Not linked to a machine', sub: null, rows: unlinkedAccessories }] : []),
-                  ].map((g) => {
-                    const isOpen = openAcc.has(g.key)
-                    const stock = g.rows.reduce((n, r) => n + r.inStock, 0)
-                    return (
-                      <li key={g.key} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
-                        <button onClick={() => toggleAcc(g.key)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left">
-                          <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="font-semibold">🔧 {g.key === 'unlinked' ? g.title : `Accessories for ${g.title}`}</span>
-                            {g.sub && <span className="ml-2 text-slate-500 dark:text-slate-400">{g.sub}</span>}
-                          </span>
-                          <span className="flex gap-1.5">
-                            <CountPill n={g.rows.length} label={g.rows.length === 1 ? 'accessory' : 'accessories'} tone="grey" />
-                            <CountPill n={stock} label="in stock" tone="green" />
-                          </span>
-                        </button>
-                        {isOpen && <ul className="space-y-2 border-t border-slate-200 p-2 dark:border-slate-800">{g.rows.map(renderRow)}</ul>}
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
-            )
-          )}
+          {searching
+            ? accessoryRows.length > 0 && (
+                <section className="space-y-2">
+                  <h2 className="text-lg font-semibold">Accessories matching your search</h2>
+                  <ul className="space-y-2">{accessoryRows.map(renderRow)}</ul>
+                </section>
+              )
+            : (accessoryGroups.length > 0 || unlinkedAccessories.length > 0) && (
+                <section className="space-y-2">
+                  <h2 className="text-lg font-semibold">Accessories</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Click a machine to see its accessories.</p>
+                  <ul className="space-y-2">
+                    {[
+                      ...accessoryGroups.map((g) => ({ key: g.machine.id, title: g.machine.model_number, sub: g.machine.name, rows: g.rows })),
+                      ...(unlinkedAccessories.length ? [{ key: 'unlinked', title: 'Not linked to a machine', sub: null, rows: unlinkedAccessories }] : []),
+                    ].map((g) => {
+                      const isOpen = openAcc.has(g.key)
+                      const stock = g.rows.reduce((n, r) => n + r.inStock, 0)
+                      return (
+                        <li key={g.key} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
+                          <button onClick={() => toggleAcc(g.key)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left">
+                            <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="font-semibold">🔧 {g.key === 'unlinked' ? g.title : `Accessories for ${g.title}`}</span>
+                              {g.sub && <span className="ml-2 text-slate-500 dark:text-slate-400">{g.sub}</span>}
+                            </span>
+                            <span className="flex gap-1.5">
+                              <CountPill n={g.rows.length} label={g.rows.length === 1 ? 'accessory' : 'accessories'} tone="grey" />
+                              <CountPill n={stock} label="in stock" tone="green" />
+                            </span>
+                          </button>
+                          {isOpen && <ul className="space-y-2 border-t border-slate-200 p-2 dark:border-slate-800">{g.rows.map(renderRow)}</ul>}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )}
         </>
       )}
 
@@ -640,15 +635,13 @@ export function MachinesPage() {
         <ModelForm
           defaultCategory={categories.includes(category as (typeof categories)[number]) ? (category as Model['category']) : null}
           model={modelForm.model}
-          models={data.models} accessoryFor={modelForm.accessoryFor} onClose={() => setModelForm(null)} />
+          models={data.models}
+          accessoryFor={modelForm.accessoryFor}
+          onClose={() => setModelForm(null)}
+        />
       )}
       {machineForm && data && (
-        <MachineForm
-          models={data.models}
-          machine={machineForm.machine}
-          defaultModelId={machineForm.modelId}
-          onClose={() => setMachineForm(null)}
-        />
+        <MachineForm models={data.models} machine={machineForm.machine} defaultModelId={machineForm.modelId} onClose={() => setMachineForm(null)} />
       )}
       {showContainers !== false && (
         <ContainersWindow
@@ -696,12 +689,24 @@ export function MachinesPage() {
         />
       )}
       {containerForm && data && <ContainerForm models={data.models} onClose={() => setContainerForm(false)} />}
-      {history && data && (
-        <History machineId={history.machine.id} title={history.title} models={data.models} onClose={() => setHistory(null)} />
+      {history && data && <History machineId={history.machine.id} title={history.title} models={data.models} onClose={() => setHistory(null)} />}
+      {confirm && (
+        <Confirm
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          onConfirm={confirm.run}
+          onCancel={() => setConfirm(null)}
+        />
       )}
-      {confirm && <Confirm title={confirm.title} message={confirm.message} confirmLabel={confirm.confirmLabel} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
       {showProduction && data && (
-        <ProductionWindow orders={data.production} models={data.models} isFounder={isFounder} onMessage={(msg) => setToast(msg)} onClose={() => setShowProduction(false)} />
+        <ProductionWindow
+          orders={data.production}
+          models={data.models}
+          isFounder={isFounder}
+          onMessage={(msg) => setToast(msg)}
+          onClose={() => setShowProduction(false)}
+        />
       )}
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
     </div>
@@ -759,6 +764,31 @@ function MachineList({
     </div>
   )
 
+  // Identical machines (same status, size, container, ETA, location; no serial number or notes yet)
+  // show as one line with a quantity, e.g. "18 × En route · Container BPROS · ETA 5 Nov".
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const groups = useMemo(() => {
+    const out = new Map<string, Machine[]>()
+    for (const m of machines) {
+      const key = m.serial_number || m.notes ? m.id : [m.status, m.size, m.container_ref, m.eta, m.location, m.status === 'sold' ? m.sold_date : ''].join('|')
+      out.set(key, [...(out.get(key) ?? []), m])
+    }
+    return [...out.entries()].map(([key, items]) => ({ key, items }))
+  }, [machines])
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  const showEach = (g: { key: string; items: Machine[] }) => (
+    <Button size="sm" onClick={() => toggle(g.key)}>
+      {expanded.has(g.key) ? 'Hide ▴' : `Show each (${g.items.length}) ▾`}
+    </Button>
+  )
+  const qty = (n: number) => n > 1 && <span className="ml-1.5 text-base font-bold">× {n}</span>
+
   const detail = (m: Machine) =>
     m.status === 'en_route'
       ? [m.container_ref && `Container ${m.container_ref}`, m.eta && `ETA ${fmtDate(m.eta)}`].filter(Boolean).join(' · ')
@@ -770,20 +800,41 @@ function MachineList({
     <>
       {/* Phone layout */}
       <ul className="space-y-2 md:hidden">
-        {machines.map((m) => (
-          <li key={m.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={m.status} />
-              {hasSizes && <span className="font-medium">{m.size}</span>}
-              {m.serial_number && <span className="text-slate-500">S/N {m.serial_number}</span>}
-            </div>
-            {(detail(m) || m.location) && (
-              <div className="mt-1 text-slate-600 dark:text-slate-300">{[detail(m), m.location].filter(Boolean).join(' · ')}</div>
-            )}
-            {m.notes && <div className="mt-1 text-slate-500">{m.notes}</div>}
-            <div className="mt-2">{actions(m)}</div>
-          </li>
-        ))}
+        {groups.flatMap((g) => {
+          const m = g.items[0]
+          const rows = g.items.length > 1 && !expanded.has(g.key) ? [] : g.items
+          return [
+            ...(g.items.length > 1
+              ? [
+                  <li key={g.key} className="rounded-lg border-2 border-slate-300 p-3 text-sm dark:border-slate-700">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={m.status} />
+                      {qty(g.items.length)}
+                      {hasSizes && <span className="font-medium">{m.size}</span>}
+                    </div>
+                    {(detail(m) || m.location) && (
+                      <div className="mt-1 text-slate-600 dark:text-slate-300">{[detail(m), m.location].filter(Boolean).join(' · ')}</div>
+                    )}
+                    <div className="mt-2">{showEach(g)}</div>
+                  </li>,
+                ]
+              : []),
+            ...rows.map((m) => (
+              <li key={m.id} className={`rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800 ${g.items.length > 1 ? 'ml-4' : ''}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={m.status} />
+                  {hasSizes && <span className="font-medium">{m.size}</span>}
+                  {m.serial_number && <span className="text-slate-500">S/N {m.serial_number}</span>}
+                </div>
+                {(detail(m) || m.location) && (
+                  <div className="mt-1 text-slate-600 dark:text-slate-300">{[detail(m), m.location].filter(Boolean).join(' · ')}</div>
+                )}
+                {m.notes && <div className="mt-1 text-slate-500">{m.notes}</div>}
+                <div className="mt-2">{actions(m)}</div>
+              </li>
+            )),
+          ]
+        })}
       </ul>
 
       {/* Desktop layout */}
@@ -801,19 +852,41 @@ function MachineList({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {machines.map((m) => (
-              <tr key={m.id} className="align-top">
-                <td className="py-2 pr-3">
-                  <StatusBadge status={m.status} />
-                </td>
-                {hasSizes && <td className="py-2 pr-3 font-medium">{m.size}</td>}
-                <td className="py-2 pr-3">{m.serial_number}</td>
-                <td className="py-2 pr-3">{detail(m)}</td>
-                <td className="py-2 pr-3">{m.location}</td>
-                <td className="py-2 pr-3 text-slate-500">{m.notes}</td>
-                <td className="py-2">{actions(m)}</td>
-              </tr>
-            ))}
+            {groups.flatMap((g) => {
+              const first = g.items[0]
+              const many = g.items.length > 1
+              return [
+                ...(many
+                  ? [
+                      <tr key={g.key} className="align-middle bg-slate-50 dark:bg-slate-800/40">
+                        <td className="py-2 pr-3">
+                          <StatusBadge status={first.status} />
+                          {qty(g.items.length)}
+                        </td>
+                        {hasSizes && <td className="py-2 pr-3 font-medium">{first.size}</td>}
+                        <td className="py-2 pr-3 text-slate-400">–</td>
+                        <td className="py-2 pr-3 font-medium">{detail(first)}</td>
+                        <td className="py-2 pr-3">{first.location}</td>
+                        <td className="py-2 pr-3"></td>
+                        <td className="py-2">{showEach(g)}</td>
+                      </tr>,
+                    ]
+                  : []),
+                ...(many && !expanded.has(g.key) ? [] : g.items).map((m) => (
+                  <tr key={m.id} className="align-top">
+                    <td className={`py-2 pr-3 ${many ? 'pl-6' : ''}`}>
+                      <StatusBadge status={m.status} />
+                    </td>
+                    {hasSizes && <td className="py-2 pr-3 font-medium">{m.size}</td>}
+                    <td className="py-2 pr-3">{m.serial_number}</td>
+                    <td className="py-2 pr-3">{detail(m)}</td>
+                    <td className="py-2 pr-3">{m.location}</td>
+                    <td className="py-2 pr-3 text-slate-500">{m.notes}</td>
+                    <td className="py-2">{actions(m)}</td>
+                  </tr>
+                )),
+              ]
+            })}
           </tbody>
         </table>
       </div>
