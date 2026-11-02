@@ -103,6 +103,7 @@ export function StockOverview({
         .sort((a, b) => a.inStock - b.inStock),
       arriving: containers.filter((c) => c.eta && c.eta <= addDays(now, 28)),
       noEta: containers.filter((c) => !c.eta).length,
+      allContainers: containers.length,
     }
   }, [models, machines, now, production])
 
@@ -158,12 +159,12 @@ export function StockOverview({
           )}
         </Card>
 
-        <Card title="🚢 Containers arriving in the next 4 weeks">
+        <Card title={`🚢 Containers arriving in the next 4 weeks${d.arriving.length ? ` (${d.arriving.length})` : ''}`}>
           {d.arriving.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">No containers due in the next 4 weeks.</p>
           ) : (
             <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-              {d.arriving.map((c) => (
+              {d.arriving.slice(0, PREVIEW).map((c) => (
                 <li key={c.ref}>
                   <button onClick={() => onContainer(c.ref)} className="w-full rounded-lg px-2 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800">
                     <span className="font-semibold">🚢 {c.ref}</span>
@@ -181,7 +182,7 @@ export function StockOverview({
             </p>
           )}
           <button onClick={() => onContainer(null)} className={`mt-2 inline-block text-sm ${linkClass}`}>
-            Open all containers →
+            Open all containers{d.allContainers ? ` (${d.allContainers})` : ''} →
           </button>
         </Card>
       </div>
@@ -199,4 +200,4 @@ export function StockOverview({
   )
 }
 
-const PREVIEW = 5 // low stock lines shown on the page; the rest open in a window
+const PREVIEW = 5 // low stock lines and containers shown on the page; the rest open in a window

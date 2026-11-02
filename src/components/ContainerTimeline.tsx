@@ -4,6 +4,7 @@ import { addDays, parse } from '../lib/dates'
 import { fmtDate } from './ui'
 
 const DAYS = 28
+const MAX = 8 // containers drawn on the timeline
 
 // Height of the wavy line (0–100 % of the track) at a horizontal position (0–1).
 const waveY = (x: number) => 50 + 20 * Math.sin(x * Math.PI * 3)
@@ -22,7 +23,10 @@ const short = (d: string) => parse(d).toLocaleDateString('en-GB', { day: 'numeri
 
 export function ContainerTimeline({ containers, today }: { containers: Container[]; today: string }) {
   const end = addDays(today, DAYS)
-  const upcoming = containers.filter((c) => c.eta && c.eta <= end).sort((a, b) => a.eta!.localeCompare(b.eta!))
+  const due = containers.filter((c) => c.eta && c.eta <= end).sort((a, b) => a.eta!.localeCompare(b.eta!))
+  // Only the soonest few fit on the timeline; the rest are counted underneath.
+  const upcoming = due.slice(0, MAX)
+  const more = due.length - upcoming.length
   const dayIndex = (d: string) => Math.round((parse(d).getTime() - parse(today).getTime()) / 864e5)
 
   // Lay labels out above/below the line, stepping further out when they would overlap.
@@ -41,9 +45,9 @@ export function ContainerTimeline({ containers, today }: { containers: Container
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-2 flex items-center gap-2">
-        <h2 className="font-semibold">🚢 Container timeline: next 4 weeks</h2>
+        <h2 className="font-semibold">🚢 Container timeline: next 4 weeks{due.length > 0 && ` (${due.length})`}</h2>
         <Link to="/machines?status=en_route" className="ml-auto text-sm font-medium text-sky-700 underline dark:text-sky-300">
-          All en route
+          {more > 0 ? `+ ${more} more · open all containers` : 'All en route'}
         </Link>
       </div>
 
@@ -131,7 +135,7 @@ export function ContainerTimeline({ containers, today }: { containers: Container
       {/* Phones: vertical timeline */}
       {upcoming.length > 0 && (
         <ol className="relative ml-2 space-y-4 border-l-2 border-dashed border-brand-500 pl-5 md:hidden">
-          {placed.map(({ c, overdue }) => (
+          {placed.slice(0, 5).map(({ c, overdue }) => (
             <li key={c.ref} className="relative">
               <span
                 className={`absolute -left-[37px] top-0 flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white text-base dark:bg-slate-900 ${
@@ -150,6 +154,11 @@ export function ContainerTimeline({ containers, today }: { containers: Container
             </li>
           ))}
         </ol>
+      )}
+      {due.length > 5 && (
+        <Link to="/machines?status=en_route" className="mt-3 block text-sm font-medium text-sky-700 underline md:hidden dark:text-sky-300">
+          + {due.length - 5} more containers in the next 4 weeks →
+        </Link>
       )}
     </section>
   )
