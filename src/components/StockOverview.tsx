@@ -1,13 +1,23 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
 import type { Machine, Model, ProductionOrder } from '../lib/types'
-import { fmtDate, today } from './ui'
+import { Modal, fmtDate, inputClass, today } from './ui'
 import { isImplement, isMachine, lowStockLevel, modelLabel } from '../lib/modelLabel'
 
 export const linkClass = 'font-medium text-sky-700 underline dark:text-sky-300'
 
-export function Card({ title, action, children, tone = 'default' }: { title: string; action?: ReactNode; children: ReactNode; tone?: 'default' | 'alert' | 'warn' }) {
+export function Card({
+  title,
+  action,
+  children,
+  tone = 'default',
+}: {
+  title: string
+  action?: ReactNode
+  children: ReactNode
+  tone?: 'default' | 'alert' | 'warn'
+}) {
   const tones = {
     default: 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
     alert: 'border-green-300 bg-green-50 dark:border-green-900 dark:bg-green-950/30',
@@ -26,7 +36,10 @@ export function Card({ title, action, children, tone = 'default' }: { title: str
 
 function Stat({ label, value, onClick, tone }: { label: string; value: number; onClick: () => void; tone: string }) {
   return (
-    <button onClick={onClick} className="rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900">
+    <button
+      onClick={onClick}
+      className="rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+    >
       <div className={`text-2xl font-bold ${tone}`}>{value}</div>
       <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
     </button>
@@ -93,6 +106,28 @@ export function StockOverview({
     }
   }, [models, machines, now, production])
 
+  const [showAll, setShowAll] = useState(false)
+  const [lowSearch, setLowSearch] = useState('')
+  type Low = (typeof d.lowStock)[number]
+  const lowRow = (l: Low) => (
+    <li key={`${l.model.id}|${l.size ?? ''}`} className="flex flex-wrap items-center gap-x-3 py-1.5">
+      <button onClick={() => (setShowAll(false), onModel(l.model.id))} className="font-semibold hover:underline">
+        {modelLabel(l.model, models, l.size)}
+      </button>
+      {l.model.name && <span className="text-slate-500">{l.model.name}</span>}
+      <span className="ml-auto">
+        <strong className={l.inStock === 0 ? 'text-red-600 dark:text-red-400' : ''}>{l.inStock}</strong> in stock
+        <span className="text-slate-500">
+          {' '}
+          (low at {l.level}
+          {l.size ? ' per size' : ''})
+        </span>
+        {l.enRoute > 0 && <span className="text-amber-700 dark:text-amber-400"> · {l.enRoute} on the way</span>}
+        {l.making > 0 && <span className="text-violet-700 dark:text-violet-400"> · {l.making} in production</span>}
+      </span>
+    </li>
+  )
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
@@ -102,7 +137,7 @@ export function StockOverview({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="⚠️ Low stock: needs ordering" tone={d.lowStock.length ? 'warn' : 'default'}>
+        <Card title={`⚠️ Low stock: needs ordering${d.lowStock.length ? ` (${d.lowStock.length})` : ''}`} tone={d.lowStock.length ? 'warn' : 'default'}>
           {d.levelsMissing ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Low stock levels are not switched on yet. A manager needs to run <code>database/03-calendar-and-low-stock.sql</code> in Supabase.
@@ -114,22 +149,12 @@ export function StockOverview({
           ) : d.lowStock.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">All models are above their low stock level. 👍</p>
           ) : (
-            <ul className="divide-y divide-red-100 text-sm dark:divide-red-900/50">
-              {d.lowStock.map((l) => (
-                <li key={`${l.model.id}|${l.size ?? ''}`} className="flex flex-wrap items-center gap-x-3 py-1.5">
-                  <button onClick={() => onModel(l.model.id)} className="font-semibold hover:underline">
-                    {modelLabel(l.model, models, l.size)}
-                  </button>
-                  {l.model.name && <span className="text-slate-500">{l.model.name}</span>}
-                  <span className="ml-auto">
-                    <strong className={l.inStock === 0 ? 'text-red-600 dark:text-red-400' : ''}>{l.inStock}</strong> in stock
-                    <span className="text-slate-500"> (low at {l.level}{l.size ? ' per size' : ''})</span>
-                    {l.enRoute > 0 && <span className="text-amber-700 dark:text-amber-400"> · {l.enRoute} on the way</span>}
-                    {l.making > 0 && <span className="text-violet-700 dark:text-violet-400"> · {l.making} in production</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="divide-y divide-red-100 text-sm dark:divide-red-900/50">{d.lowStock.slice(0, PREVIEW).map(lowRow)}</ul>
+              <button onClick={() => setShowAll(true)} className={`mt-2 inline-block text-sm ${linkClass}`}>
+                Open all low stock ({d.lowStock.length}) →
+              </button>
+            </>
           )}
         </Card>
 
@@ -150,12 +175,28 @@ export function StockOverview({
               ))}
             </ul>
           )}
-          {d.noEta > 0 && <p className="mt-2 text-xs text-slate-500">+ {d.noEta} container{d.noEta === 1 ? '' : 's'} with no ETA set.</p>}
+          {d.noEta > 0 && (
+            <p className="mt-2 text-xs text-slate-500">
+              + {d.noEta} container{d.noEta === 1 ? '' : 's'} with no ETA set.
+            </p>
+          )}
           <button onClick={() => onContainer(null)} className={`mt-2 inline-block text-sm ${linkClass}`}>
             Open all containers →
           </button>
         </Card>
       </div>
+      {showAll && (
+        <Modal title={`⚠️ Low stock: needs ordering (${d.lowStock.length})`} onClose={() => setShowAll(false)} wide>
+          <input className={`${inputClass} mb-3`} placeholder="Search…" autoFocus value={lowSearch} onChange={(e) => setLowSearch(e.target.value)} />
+          <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+            {d.lowStock
+              .filter((l) => !lowSearch.trim() || modelLabel(l.model, models, l.size).toLowerCase().includes(lowSearch.trim().toLowerCase()))
+              .map(lowRow)}
+          </ul>
+        </Modal>
+      )}
     </div>
   )
 }
+
+const PREVIEW = 5 // low stock lines shown on the page; the rest open in a window
