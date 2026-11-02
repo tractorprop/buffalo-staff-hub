@@ -39,7 +39,8 @@ export function WaitlistForm({
     if (!modelId) return setError('Please choose the model the customer wants.')
     if (!phone.trim() && !email.trim()) return setError('Please enter a phone number or an email so we can contact them.')
     const amountValue = amount.trim() === '' ? null : Number(amount.replace(/[£,\s]/g, ''))
-    if (deposit && amountValue !== null && !(amountValue >= 0)) return setError('Check the deposit amount.')
+    if (deposit && !(amountValue !== null && amountValue > 0))
+      return setError('Enter the deposit amount (more than £0), or untick "Deposit received" if no deposit has been paid.')
     setBusy(true)
     setError('')
     const row: Record<string, unknown> = {
@@ -105,9 +106,13 @@ export function WaitlistForm({
             <input type="checkbox" className="h-5 w-5 accent-green-600" checked={deposit} onChange={(e) => setDeposit(e.target.checked)} />
             💷 Deposit received
           </label>
+          {entry?.deposit_paid && !deposit && (
+            <p className="mt-2 text-xs font-semibold text-red-600 dark:text-red-400">The deposit will be removed when you save.</p>
+          )}
+          {!deposit && !entry?.deposit_paid && <p className="mt-1 text-xs text-slate-500">Only tick this once the customer has actually paid.</p>}
           {deposit && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Field label="Amount (£)" hint="Optional">
+              <Field label="Amount (£) *">
                 <input inputMode="decimal" className={inputClass} placeholder="e.g. 500" value={amount} onChange={(e) => setAmount(e.target.value)} />
               </Field>
               <Field label="Date received">

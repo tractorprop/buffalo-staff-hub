@@ -44,6 +44,7 @@ export function WaitlistPage() {
   const [search, setSearch] = useState('')
   const [form, setForm] = useState<{ entry?: WaitlistEntry; modelId?: string; deposit?: boolean } | null>(null)
   const [confirm, setConfirm] = useState<WaitlistEntry | null>(null)
+  const [removeDeposit, setRemoveDeposit] = useState<WaitlistEntry | null>(null)
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
 
   const groups = useMemo(() => {
@@ -128,14 +129,9 @@ export function WaitlistPage() {
           <h1 className="text-2xl font-bold">Waiting list</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Customers who wanted a model we didn't have in stock.</p>
         </div>
-        <div className="ml-auto flex flex-wrap gap-2">
-          <Button onClick={() => setForm({ modelId: modelFilter ?? undefined, deposit: true })} disabled={!data?.models.length}>
-            💷 + Add deposit customer
-          </Button>
-          <Button variant="primary" onClick={() => setForm({ modelId: modelFilter ?? undefined })} disabled={!data?.models.length}>
-            + Add customer
-          </Button>
-        </div>
+        <Button variant="primary" className="ml-auto" onClick={() => setForm({ modelId: modelFilter ?? undefined })} disabled={!data?.models.length}>
+          + Add customer
+        </Button>
       </div>
 
       {filteredModel && (
@@ -217,7 +213,7 @@ export function WaitlistPage() {
                           {have > 0 && <span className="rounded-full bg-green-600 px-2 py-0.5 text-xs font-semibold text-white">In stock · {have}</span>}
                         </div>
                         <div className="mt-1.5 inline-block rounded-lg bg-green-600 px-3 py-1 text-sm font-bold text-white">
-                          💷 DEPOSIT PAID{e.deposit_amount != null && ` · ${money(e.deposit_amount)}`}
+                          💷 DEPOSIT PAID{!!e.deposit_amount && ` · ${money(e.deposit_amount)}`}
                           {e.deposit_date && ` · ${fmtDate(e.deposit_date)}`}
                         </div>
                         {e.deposit_by && <span className="ml-2 text-xs text-slate-500">recorded by {personName(profiles, e.deposit_by)}</span>}
@@ -252,6 +248,9 @@ export function WaitlistPage() {
                         )}
                         <Button size="sm" variant="ghost" onClick={() => setForm({ entry: e })}>
                           Edit
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setRemoveDeposit(e)}>
+                          Remove deposit
                         </Button>
                         {isManager && (
                           <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirm(e)}>
@@ -319,9 +318,6 @@ export function WaitlistPage() {
                           Mark contacted
                         </Button>
                       )}
-                      <Button size="sm" className="border-green-600 font-semibold text-green-700 dark:text-green-400" onClick={() => setForm({ entry: e, deposit: true })}>
-                        💷 Deposit received
-                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => setForm({ entry: e })}>
                         Edit
                       </Button>
@@ -342,6 +338,22 @@ export function WaitlistPage() {
       {isManager && data && <WaitlistHistory models={data.models} />}
 
       {form && data && <WaitlistForm models={data.models} entry={form.entry} defaultModelId={form.modelId} deposit={form.deposit} onClose={() => setForm(null)} />}
+      {removeDeposit && (
+        <Confirm
+          title="Remove the deposit?"
+          message={`${removeDeposit.customer_name} stays on the waiting list as a normal customer, with no deposit. Use this if the deposit was added by mistake or refunded.`}
+          confirmLabel="Remove deposit"
+          onConfirm={async () => {
+            const { error } = await supabase!
+              .from('waitlist')
+              .update({ deposit_paid: false, deposit_amount: null, deposit_date: null, deposit_by: null })
+              .eq('id', removeDeposit.id)
+            setRemoveDeposit(null)
+            setToast({ text: error ? friendlyError(error) : `Deposit removed for ${removeDeposit.customer_name}.` })
+          }}
+          onCancel={() => setRemoveDeposit(null)}
+        />
+      )}
       {confirm && (
         <Confirm
           title="Delete waiting customer?"
