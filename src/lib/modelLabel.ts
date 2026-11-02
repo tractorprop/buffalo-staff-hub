@@ -31,3 +31,16 @@ export function invoiceDescription(m: Model, models: Model[], size?: string | nu
 }
 
 export const isMachine = (m: Pick<Model, 'kind'> | undefined) => m?.kind !== 'accessory'
+
+// Default low stock levels, used when a model has no level of its own.
+export function defaultLowStock(m: Pick<Model, 'model_number' | 'name'> & Partial<Pick<Model, 'kind'>>): number | null {
+  if (m.kind === 'accessory') return 10
+  const text = `${m.model_number} ${m.name ?? ''}`.toLowerCase()
+  if (/dumper/.test(text)) return 7
+  if (/digger|excavator|skid/.test(text)) return 10
+  return null
+}
+
+// The low stock level that applies: the model's own, otherwise the default for its type.
+export const lowStockLevel = (m: Pick<Model, 'model_number' | 'name'> & Partial<Pick<Model, 'kind' | 'reorder_level'>>) =>
+  m.reorder_level ?? defaultLowStock(m)

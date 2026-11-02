@@ -3,7 +3,7 @@ import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
 import type { Machine, Model, ProductionOrder } from '../lib/types'
 import { fmtDate, today } from './ui'
-import { isMachine, modelLabel } from '../lib/modelLabel'
+import { isMachine, lowStockLevel, modelLabel } from '../lib/modelLabel'
 
 export const linkClass = 'font-medium text-sky-700 underline dark:text-sky-300'
 
@@ -70,10 +70,13 @@ export function StockOverview({
       inStock: onlyMachines.filter((m) => m.status === 'in_stock').length,
       enRoute: onlyMachines.filter((m) => m.status === 'en_route').length,
       soldThisMonth: onlyMachines.filter((m) => m.status === 'sold' && m.sold_date?.startsWith(now.slice(0, 7))).length,
-      levelsSet: models.some((m) => m.reorder_level != null),
+      levelsSet: models.some((m) => lowStockLevel(m) != null),
       levelsMissing: models.length > 0 && models.every((m) => m.reorder_level === undefined),
       lowStock: models
-        .filter((m) => m.reorder_level != null && (inStockBy.get(m.id) ?? 0) <= m.reorder_level)
+        .filter((m) => {
+          const level = lowStockLevel(m)
+          return level != null && (inStockBy.get(m.id) ?? 0) <= level
+        })
         .map((m) => ({ model: m, inStock: inStockBy.get(m.id) ?? 0, enRoute: enRouteBy.get(m.id) ?? 0, making: makingBy.get(m.id) ?? 0 }))
         .sort((a, b) => a.inStock - b.inStock),
       arriving: containers.filter((c) => c.eta && c.eta <= addDays(now, 28)),
@@ -111,7 +114,7 @@ export function StockOverview({
                   {l.model.name && <span className="text-slate-500">{l.model.name}</span>}
                   <span className="ml-auto">
                     <strong className={l.inStock === 0 ? 'text-red-600 dark:text-red-400' : ''}>{l.inStock}</strong> in stock
-                    <span className="text-slate-500"> (low at {l.model.reorder_level})</span>
+                    <span className="text-slate-500"> (low at {lowStockLevel(l.model)})</span>
                     {l.enRoute > 0 && <span className="text-amber-700 dark:text-amber-400"> · {l.enRoute} on the way</span>}
                     {l.making > 0 && <span className="text-violet-700 dark:text-violet-400"> · {l.making} in production</span>}
                   </span>

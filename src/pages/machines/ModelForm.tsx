@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import type { Model } from '../../lib/types'
+import { defaultLowStock } from '../../lib/modelLabel'
 import { Button, ErrorText, Field, Modal, inputClass } from '../../components/ui'
 
 const fitNumbers = (ids: string[], models: Model[]) =>
@@ -201,8 +202,24 @@ export function ModelForm({
         <Field label="Sizes" hint="Separate with commas, e.g. Small, Medium, Large. Leave empty if this model comes in one size.">
           <input className={inputClass} value={sizes} onChange={(e) => setSizes(e.target.value)} />
         </Field>
-        <Field label="Low stock level" hint="The dashboard warns when the number in stock is at or below this. Leave empty for no warning.">
-          <input type="number" min={0} inputMode="numeric" className={inputClass} value={reorder} onChange={(e) => setReorder(e.target.value)} />
+        <Field
+          label="Low stock level"
+          hint={(() => {
+            const d = defaultLowStock({ model_number: modelNumber, name, kind })
+            return d != null
+              ? `A warning shows when the number in stock is at or below this. Leave empty to use the default of ${d} (diggers, skid steers and attachments 10, dumpers 7).`
+              : 'A warning shows when the number in stock is at or below this. Leave empty for no warning.'
+          })()}
+        >
+          <input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            className={inputClass}
+            placeholder={defaultLowStock({ model_number: modelNumber, name, kind }) != null ? `Default: ${defaultLowStock({ model_number: modelNumber, name, kind })}` : ''}
+            value={reorder}
+            onChange={(e) => setReorder(e.target.value)}
+          />
         </Field>
         <Field label="Notes">
           <textarea className={inputClass} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
