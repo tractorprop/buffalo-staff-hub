@@ -1,10 +1,10 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import { personName, useProfiles } from '../../lib/useProfiles'
-import type { AuditEntry, Invoice, Model } from '../../lib/types'
-import { Button, Confirm, ErrorText, Loading, fmtDateTime, inputClass } from '../../components/ui'
+import type { AuditEntry, Invoice, Model, ShopifyLink, ShopifyOrder } from '../../lib/types'
+import { Button, Confirm, ErrorText, Loading, fmtDate, fmtDateTime, inputClass } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
 import { invoiceDescription, modelLabel as nameOf } from '../../lib/modelLabel'
 import { invoiceNumber } from '../../lib/money'
@@ -17,14 +17,41 @@ interface Line {
   size: string
   direction: Direction
   qty: number
-  fromInvoice?: number // quantity on the invoice: model and size are locked, qty can only go down
+  fromInvoice?: number // quantity on the invoice/order: model and size are locked, qty can only go down
+  itemKeys?: string[] // Shopify listings this line came from
 }
 
-// An invoice loaded into the form: its stock items fill the lines.
+// An invoice or Shopify order loaded into the form: its stock items fill the lines.
 interface LoadedInvoice {
   ref: string
-  skipped: string[] // invoice lines that aren't a stock item (or no longer exist)
-  alreadySent: number // items already taken out of stock under this invoice number
+  title: string // "invoice BM-1001" or "Shopify order #1052"
+  skipped: string[] // lines that aren't a stock item (or no longer exist)
+  alreadySent: number // items already taken out of stock under this reference
+  order?: ShopifyOrder
+  unlinked?: ShopifyOrder['items'] // Shopify listings not yet linked to a hub item
+}
+
+const shopifyRef = (o: ShopifyOrder) => `Shopify ${o.name}`
+
+// Turn a Shopify order into stock lines using the founder's links.
+function linesFromOrder(order: ShopifyOrder, links: Map<string, ShopifyLink>) {
+  const found = new Map<string, Line>()
+  const unlinked: ShopifyOrder['items'] = []
+  const skipped: string[] = []
+  for (const item of order.items) {
+    const link = links.get(item.key)
+    if (!link) unlinked.push(item)
+    else if (!link.model_id) skipped.push(item.title)
+    else {
+      const k = `${link.model_id}|${link.size ?? ''}`
+      const line = found.get(k) ?? { key: nextKey++, modelId: link.model_id, size: link.size ?? '', direction: 'out' as const, qty: 0, fromInvoice: 0, itemKeys: [] }
+      line.qty += item.qty
+      line.fromInvoice! += item.qty
+      line.itemKeys!.push(item.key)
+      found.set(k, line)
+    }
+  }
+  return { lines: [...found.values()], unlinked, skipped }
 }
 
 let nextKey = 1
@@ -40,14 +67,18 @@ interface Data {
   models: Model[]
   inStock: { model_id: string; size: string | null }[]
   log: AuditEntry[]
+  shopify: { orders: ShopifyOrder[]; links: ShopifyLink[]; sent: Set<string> } | null // null until 13-shopify-orders.sql is run
 }
 
 async function loadAll(days: number) {
   const since = new Date(Date.now() - days * 864e5).toISOString()
-  const [models, inStock, log] = await Promise.all([
+  const [models, inStock, log, orders, links, sent] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
     supabase!.from('machines').select('model_id, size').eq('status', 'in_stock'),
     supabase!.from('audit_log').select('*').eq('table_name', 'machines').gte('changed_at', since).order('changed_at', { ascending: false }).limit(5000),
+    supabase!.from('shopify_orders').select('*').order('ordered_at', { ascending: false }).limit(100),
+    supabase!.from('shopify_links').select('*'),
+    supabase!.from('machines').select('stock_reference').like('stock_reference', 'Shopify #%'),
   ])
   const error = models.error ?? inStock.error ?? log.error
   return {
@@ -57,6 +88,14 @@ async function loadAll(days: number) {
           models: models.data as Model[],
           inStock: inStock.data as Data['inStock'],
           log: log.data as AuditEntry[],
+          shopify:
+            orders.error || links.error
+              ? null
+              : {
+                  orders: orders.data as ShopifyOrder[],
+                  links: links.data as ShopifyLink[],
+                  sent: new Set(((sent.data ?? []) as { stock_reference: string }[]).map((m) => m.stock_reference)),
+                },
         },
     error,
   }
@@ -118,12 +157,14 @@ export function StockEntryPage() {
   const [days, setDays] = useState(30)
   const [person, setPerson] = useState('')
   const [modelSearch, setModelSearch] = useState('')
-  const { data, error, loading, reload } = useLive<Data>(['models', 'machines'], () => loadAll(days), [days])
+  const { data, error, loading, reload } = useLive<Data>(['models', 'machines', 'shopify_orders', 'shopify_links'], () => loadAll(days), [days])
   const [lines, setLines] = useState<Line[]>([newLine()])
   const [reference, setReference] = useState('')
   const [invoiceInput, setInvoiceInput] = useState('')
   const [invoice, setInvoice] = useState<LoadedInvoice | null>(null)
   const [loadingInvoice, setLoadingInvoice] = useState(false)
+  const [removeOrder, setRemoveOrder] = useState<ShopifyOrder | null>(null)
+  const { isManager } = useAuth()
   const [formError, setFormError] = useState('')
   const [done, setDone] = useState('')
   const [busy, setBusy] = useState(false)
@@ -194,11 +235,49 @@ export function StockEntryPage() {
     const sent = await supabase!.from('machines').select('id', { count: 'exact', head: true }).eq('stock_reference', ref)
     setInvoice({
       ref,
+      title: `invoice ${ref}`,
       skipped,
       alreadySent: sent.error ? 0 : (sent.count ?? 0),
     })
     setReference(ref)
     setLines([...found.values()])
+  }
+
+  const links = useMemo(() => new Map((data?.shopify?.links ?? []).map((l) => [l.item_key, l])), [data])
+  const toSend = (data?.shopify?.orders ?? []).filter((o) => !data?.shopify?.sent.has(shopifyRef(o)))
+
+  // Fill the form from a Shopify order.
+  async function loadOrder(order: ShopifyOrder) {
+    setFormError('')
+    setDone('')
+    const ref = shopifyRef(order)
+    const built = linesFromOrder(order, links)
+    if (!built.lines.length && !built.unlinked.length) return setFormError(`Order ${order.name} has no stock items on it to send out.`)
+    const sent = await supabase!.from('machines').select('id', { count: 'exact', head: true }).eq('stock_reference', ref)
+    setInvoice({ ref, title: `Shopify order ${order.name}`, skipped: built.skipped, alreadySent: sent.error ? 0 : (sent.count ?? 0), order, unlinked: built.unlinked })
+    setReference(ref)
+    setLines(built.lines)
+  }
+
+  // When the founder links a listing, rebuild the loaded order's lines.
+  useEffect(() => {
+    if (!invoice?.order) return
+    const built = linesFromOrder(invoice.order, links)
+    setInvoice((i) => (i ? { ...i, unlinked: built.unlinked, skipped: built.skipped } : i))
+    setLines(built.lines)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [links])
+
+  async function saveLink(item: ShopifyOrder['items'][number], modelId: string | null, size: string | null) {
+    const { error } = await supabase!.from('shopify_links').upsert({ item_key: item.key, model_id: modelId, size, title: item.title })
+    if (error) return setFormError(friendlyError(error))
+    reload()
+  }
+
+  async function unlink(keys: string[]) {
+    const { error } = await supabase!.from('shopify_links').delete().in('item_key', keys)
+    if (error) return setFormError(friendlyError(error))
+    reload()
   }
 
   function clearInvoice() {
@@ -216,11 +295,12 @@ export function StockEntryPage() {
     const filled = lines.filter((l) => l.modelId)
     const ref = reference.trim()
     if (!ref) return setFormError('Enter a reference number.')
+    if (invoice?.unlinked?.length) return setFormError('Some items on this order are not linked to the hub yet. The founder needs to link them first.')
     if (!filled.length) return setFormError('Choose a model.')
     for (const l of filled) {
       const m = data.models.find((x) => x.id === l.modelId)!
       if (m.sizes.length && !l.size) return setFormError(`Choose a size for ${m.model_number}.`)
-      if (l.fromInvoice && l.qty > l.fromInvoice) return setFormError(`Only ${l.fromInvoice} ${m.model_number} on invoice ${invoice?.ref}.`)
+      if (l.fromInvoice && l.qty > l.fromInvoice) return setFormError(`Only ${l.fromInvoice} ${m.model_number} on ${invoice?.title}.`)
       if (!(l.qty >= 1 && l.qty <= 100)) return setFormError(`Check the quantity for ${m.model_number} (1 to 100).`)
     }
 
@@ -285,10 +365,10 @@ export function StockEntryPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <span>
-                    🧾 Sending out <strong>invoice {invoice.ref}</strong>. The items below come from the invoice.
+                    {invoice.order ? '🛒' : '🧾'} Sending out <strong>{invoice.title}</strong>. The items below come from the {invoice.order ? 'order' : 'invoice'}.
                   </span>
                   <Button size="sm" className="ml-auto" onClick={clearInvoice}>
-                    Clear invoice
+                    Clear
                   </Button>
                 </div>
                 {invoice.alreadySent > 0 && (
@@ -296,6 +376,15 @@ export function StockEntryPage() {
                     ⚠️ {invoice.alreadySent} item
                     {invoice.alreadySent === 1 ? ' has' : 's have'} already been sent out under {invoice.ref}. Check before sending again.
                   </p>
+                )}
+                {!!invoice.unlinked?.length && (
+                  <div className="space-y-2 rounded-lg border border-red-300 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
+                    <p className="font-medium text-red-700 dark:text-red-300">
+                      ⚠️ {invoice.unlinked.length} Shopify listing{invoice.unlinked.length === 1 ? ' is' : 's are'} not linked to a hub item yet.
+                      {isFounder ? ' Choose the matching item once, and future orders will be recognised automatically.' : ' Ask the founder to link it before sending.'}
+                    </p>
+                    {isFounder && invoice.unlinked.map((item) => <LinkItem key={item.key} item={item} models={data?.models ?? []} onSave={saveLink} />)}
+                  </div>
                 )}
                 {invoice.skipped.length > 0 && (
                   <p className="text-xs text-slate-600 dark:text-slate-300">Not stock items, so not included: {invoice.skipped.join(', ')}</p>
@@ -324,6 +413,38 @@ export function StockEntryPage() {
                 <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
                   Fills in the machine and accessories from the invoice, so nothing is missed or picked wrongly.
                 </span>
+                {data?.shopify && (
+                  <div className="mt-3 border-t border-brand-500/40 pt-3">
+                    <span className="text-sm font-semibold">🛒 Shopify orders to send</span>
+                    {toSend.length === 0 ? (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">No Shopify orders waiting. New orders appear here automatically.</p>
+                    ) : (
+                      <ul className="mt-1 max-h-72 space-y-1 overflow-y-auto">
+                        {toSend.map((o) => {
+                          const waiting = o.items.some((i) => !links.has(i.key))
+                          return (
+                            <li key={o.id} className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-sm dark:bg-slate-900">
+                              <div className="min-w-0 flex-1">
+                                <span className="font-bold">{o.name}</span>
+                                <span className="ml-2 text-xs text-slate-500">{fmtDate(o.ordered_at)}</span>
+                                {waiting && <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">⚠️ needs linking</span>}
+                                <div className="truncate text-xs text-slate-500 dark:text-slate-400">{o.items.map((i) => `${i.qty}× ${i.title}`).join(', ')}</div>
+                              </div>
+                              <Button size="sm" variant="primary" onClick={() => loadOrder(o)}>
+                                Load
+                              </Button>
+                              {isManager && (
+                                <button className="px-1 text-slate-400 hover:text-red-600" title="Remove from list (e.g. cancelled)" onClick={() => setRemoveOrder(o)}>
+                                  ×
+                                </button>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -375,7 +496,14 @@ export function StockEntryPage() {
                     <div className="min-w-48 flex-1 py-2">
                       <span className="mr-2 font-bold text-green-700 dark:text-green-400">− Leaving</span>
                       <span className="font-semibold">{modelLabel(l.modelId, l.size)}</span>
-                      <span className="ml-2 text-xs text-slate-500">{l.fromInvoice} on invoice</span>
+                      <span className="ml-2 text-xs text-slate-500">
+                        {l.fromInvoice} on {invoice?.order ? 'order' : 'invoice'}
+                      </span>
+                      {isFounder && l.itemKeys && (
+                        <button type="button" className="ml-2 text-xs text-sky-700 underline dark:text-sky-300" onClick={() => unlink(l.itemKeys!)}>
+                          Wrong item? Change link
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="min-w-48 flex-1">
@@ -425,7 +553,7 @@ export function StockEntryPage() {
           )}
           <ErrorText>{formError}</ErrorText>
           {done && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">✓ {done}</p>}
-          <Button type="submit" variant="primary" className="w-full" disabled={busy || !reference.trim()}>
+          <Button type="submit" variant="primary" className="w-full" disabled={busy || !reference.trim() || !!invoice?.unlinked?.length}>
             {busy ? 'Saving…' : 'Save stock entry'}
           </Button>
         </form>
@@ -521,6 +649,20 @@ export function StockEntryPage() {
           </div>
         </section>
       )}
+      {removeOrder && (
+        <Confirm
+          title={`Remove order ${removeOrder.name} from the list?`}
+          message="Use this for an order that was cancelled or won't be sent. Stock doesn't change."
+          confirmLabel="Remove"
+          onConfirm={async () => {
+            const { error } = await supabase!.from('shopify_orders').delete().eq('id', removeOrder.id)
+            if (error) setFormError(friendlyError(error))
+            setRemoveOrder(null)
+            reload()
+          }}
+          onCancel={() => setRemoveOrder(null)}
+        />
+      )}
       {removeEntry && (
         <Confirm
           title="Delete this history entry?"
@@ -534,6 +676,47 @@ export function StockEntryPage() {
           onCancel={() => setRemoveEntry(null)}
         />
       )}
+    </div>
+  )
+}
+
+// Founder: link one Shopify listing to the hub item (and size) it really is.
+function LinkItem({
+  item,
+  models,
+  onSave,
+}: {
+  item: ShopifyOrder['items'][number]
+  models: Model[]
+  onSave: (item: ShopifyOrder['items'][number], modelId: string | null, size: string | null) => void
+}) {
+  const [modelId, setModelId] = useState('')
+  const [size, setSize] = useState('')
+  const m = models.find((x) => x.id === modelId)
+  return (
+    <div className="space-y-1 rounded-lg bg-slate-50 p-2 dark:bg-slate-800">
+      <div className="text-sm">
+        Shopify: <strong>{item.title}</strong> <span className="text-slate-500">× {item.qty}</span>
+      </div>
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="min-w-48 flex-1">
+          <ModelPicker models={models} value={modelId} onChange={(id) => (setModelId(id), setSize(''))} />
+        </div>
+        {m && m.sizes.length > 0 && (
+          <select className={`${inputClass} w-32`} value={size} onChange={(e) => setSize(e.target.value)}>
+            <option value="">Size…</option>
+            {m.sizes.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        )}
+        <Button size="sm" variant="primary" disabled={!m || (m.sizes.length > 0 && !size)} onClick={() => onSave(item, modelId, size || null)}>
+          Link
+        </Button>
+        <Button size="sm" onClick={() => onSave(item, null, null)}>
+          Not a stock item
+        </Button>
+      </div>
     </div>
   )
 }

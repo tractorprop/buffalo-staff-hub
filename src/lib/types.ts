@@ -166,3 +166,19 @@ export interface ContainerCheckin {
   decided_by: string | null
   decided_at: string | null
 }
+
+// A Shopify order waiting to be packed. Only the order number, date and items are kept (no customer details).
+export interface ShopifyOrder {
+  id: number
+  name: string // e.g. #1052
+  ordered_at: string
+  items: { key: string; title: string; qty: number }[]
+}
+
+// Which Shopify listing is which hub item. No model = not a stock item.
+export interface ShopifyLink {
+  item_key: string
+  model_id: string | null
+  size: string | null
+  title: string
+}
