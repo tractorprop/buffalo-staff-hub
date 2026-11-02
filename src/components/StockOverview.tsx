@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
-import type { Machine, Model } from '../lib/types'
+import type { Machine, Model, ProductionOrder } from '../lib/types'
 import { fmtDate, today } from './ui'
 import { isMachine, modelLabel } from '../lib/modelLabel'
 
@@ -40,12 +40,14 @@ export function StockOverview({
   onStatus,
   onModel,
   onContainer,
+  production = [],
 }: {
   models: Model[]
   machines: Pick<Machine, 'model_id' | 'size' | 'status' | 'sold_date' | 'eta' | 'container_ref'>[]
   onStatus: (status: 'in_stock' | 'en_route' | 'sold') => void
   onModel: (modelId: string) => void
   onContainer: (ref: string | null) => void // open the containers window (optionally on one container)
+  production?: ProductionOrder[]
 }) {
   const now = today()
   const d = useMemo(() => {
@@ -55,6 +57,8 @@ export function StockOverview({
       if (m.status === 'in_stock') inStockBy.set(m.model_id, (inStockBy.get(m.model_id) ?? 0) + 1)
       if (m.status === 'en_route') enRouteBy.set(m.model_id, (enRouteBy.get(m.model_id) ?? 0) + 1)
     }
+    const makingBy = new Map<string, number>()
+    for (const o of production) for (const i of o.items) makingBy.set(i.model_id, (makingBy.get(i.model_id) ?? 0) + i.qty)
     const machineIds = new Set(models.filter(isMachine).map((m) => m.id))
     const onlyMachines = machines.filter((m) => machineIds.has(m.model_id))
     const containers = groupContainers(
@@ -70,12 +74,12 @@ export function StockOverview({
       levelsMissing: models.length > 0 && models.every((m) => m.reorder_level === undefined),
       lowStock: models
         .filter((m) => m.reorder_level != null && (inStockBy.get(m.id) ?? 0) <= m.reorder_level)
-        .map((m) => ({ model: m, inStock: inStockBy.get(m.id) ?? 0, enRoute: enRouteBy.get(m.id) ?? 0 }))
+        .map((m) => ({ model: m, inStock: inStockBy.get(m.id) ?? 0, enRoute: enRouteBy.get(m.id) ?? 0, making: makingBy.get(m.id) ?? 0 }))
         .sort((a, b) => a.inStock - b.inStock),
       arriving: containers.filter((c) => c.eta && c.eta <= addDays(now, 28)),
       noEta: containers.filter((c) => !c.eta).length,
     }
-  }, [models, machines, now])
+  }, [models, machines, now, production])
 
   return (
     <div className="space-y-4">
@@ -109,6 +113,7 @@ export function StockOverview({
                     <strong className={l.inStock === 0 ? 'text-red-600 dark:text-red-400' : ''}>{l.inStock}</strong> in stock
                     <span className="text-slate-500"> (low at {l.model.reorder_level})</span>
                     {l.enRoute > 0 && <span className="text-amber-700 dark:text-amber-400"> · {l.enRoute} on the way</span>}
+                    {l.making > 0 && <span className="text-violet-700 dark:text-violet-400"> · {l.making} in production</span>}
                   </span>
                 </li>
               ))}

@@ -171,12 +171,13 @@ export function StatusBadge({ status }: { status: MachineStatus }) {
   return <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${statusClass[status]}`}>{statusLabel[status]}</span>
 }
 
-export function CountPill({ n, label, tone }: { n: number; label: string; tone: 'green' | 'amber' | 'grey' | 'blue' }) {
+export function CountPill({ n, label, tone }: { n: number; label: string; tone: 'green' | 'amber' | 'grey' | 'blue' | 'violet' }) {
   const tones = {
     green: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',
     amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
     grey: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
     blue: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300',
+    violet: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300',
   }
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${n === 0 ? 'opacity-40' : ''} ${tones[tone]}`}>

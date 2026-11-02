@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
-import type { Machine, MachineStatus, Model, WaitlistEntry, ContainerCheckin } from '../../lib/types'
+import type { Machine, MachineStatus, Model, WaitlistEntry, ContainerCheckin, ProductionOrder } from '../../lib/types'
+import { ProductionWindow } from './ProductionWindow'
 import {
   Button,
   Confirm,
@@ -36,14 +37,16 @@ interface Data {
   machines: Machine[]
   waiting: WaitlistEntry[]
   checkins: ContainerCheckin[] // pending container check-ins waiting for a manager
+  production: ProductionOrder[] // empty until 18-production-orders.sql is run
 }
 
 async function loadAll() {
-  const [models, machines, waiting, checkins] = await Promise.all([
+  const [models, machines, waiting, checkins, production] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
     supabase!.from('machines').select('*').order('created_at'),
     supabase!.from('waitlist').select('*').eq('contacted', false).order('created_at'),
     supabase!.from('container_checkins').select('*').eq('status', 'pending').order('submitted_at'),
+    supabase!.from('production_orders').select('*').order('eta', { nullsFirst: false }),
   ])
   const error = models.error ?? machines.error ?? waiting.error
   return {
@@ -54,6 +57,7 @@ async function loadAll() {
           machines: machines.data as Machine[],
           waiting: waiting.data as WaitlistEntry[],
           checkins: (checkins.data as ContainerCheckin[] | null) ?? [],
+          production: (production.data as ProductionOrder[] | null) ?? [],
         },
     error,
   }
@@ -63,7 +67,7 @@ const statusOrder: Record<MachineStatus, number> = { in_stock: 0, en_route: 1, s
 
 export function MachinesPage() {
   const { isManager, isFounder } = useAuth()
-  const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist', 'container_checkins'], loadAll)
+  const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist', 'container_checkins', 'production_orders'], loadAll)
   const [review, setReview] = useState<ContainerCheckin | null>(null)
   const pendingFor = (ref: string) => data?.checkins.find((c) => c.container_ref === ref)
   const [params, setParams] = useSearchParams()
@@ -77,6 +81,7 @@ export function MachinesPage() {
   const [containerForm, setContainerForm] = useState(false)
   const [showContainers, setShowContainers] = useState<string | null | false>(false) // false = closed, null = open on the first
   const [checkIn, setCheckIn] = useState<string | null>(null)
+  const [showProduction, setShowProduction] = useState(false)
   const [history, setHistory] = useState<{ machine: Machine; title: string } | null>(null)
   const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel?: string; run: () => Promise<void> } | null>(null)
   const [toast, setToast] = useState('')
@@ -96,6 +101,7 @@ export function MachinesPage() {
         waiting: data.waiting.filter((w) => w.model_id === model.id),
         inStock: count('in_stock'),
         enRoute: count('en_route'),
+        inProduction: data.production.reduce((n, o) => n + o.items.filter((i) => i.model_id === model.id).reduce((a, i) => a + i.qty, 0), 0),
         sold: count('sold'),
       }
     })
@@ -278,6 +284,7 @@ export function MachinesPage() {
                   <span className="flex flex-wrap gap-1.5">
                     <CountPill n={r.inStock} label="in stock" tone="green" />
                     <CountPill n={r.enRoute} label="en route" tone="amber" />
+                    {r.inProduction > 0 && <CountPill n={r.inProduction} label="in production" tone="violet" />}
                     <CountPill n={r.sold} label="sold" tone="grey" />
                     <CountPill n={r.waiting.length} label="waiting" tone="blue" />
                   </span>
@@ -422,6 +429,7 @@ export function MachinesPage() {
           }}
           onModel={openModel}
           onContainer={(ref) => setShowContainers(ref)}
+          production={data.production}
         />
       )}
 
@@ -455,6 +463,33 @@ export function MachinesPage() {
             </span>
           </span>
           <span className="ml-auto rounded-xl bg-ink px-4 py-2 font-semibold text-brand-500">View & check in →</span>
+        </button>
+      )}
+
+      {(data?.production.length || isFounder) && (
+        <button
+          onClick={() => setShowProduction(true)}
+          className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border-2 border-ink bg-white px-5 py-4 text-left text-ink shadow-sm hover:bg-slate-50 dark:border-brand-500 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+        >
+          <span className="text-3xl">🏭</span>
+          <span>
+            <span className="block text-lg font-bold">Machines in production</span>
+            <span className="text-sm">
+              {data?.production.length ? (
+                <>
+                  <strong>{data.production.length}</strong> order{data.production.length === 1 ? '' : 's'} ·{' '}
+                  <strong>{data.production.reduce((n, o) => n + o.items.reduce((a, i) => a + i.qty, 0), 0)}</strong> items
+                  {(() => {
+                    const next = data.production.map((o) => o.eta).filter(Boolean).sort()[0]
+                    return next ? <> · next ETA {fmtDate(next)}</> : null
+                  })()}
+                </>
+              ) : (
+                'Nothing in production yet'
+              )}
+            </span>
+          </span>
+          <span className="ml-auto rounded-xl bg-ink px-4 py-2 font-semibold text-brand-500">View →</span>
         </button>
       )}
 
@@ -657,6 +692,9 @@ export function MachinesPage() {
         <History machineId={history.machine.id} title={history.title} models={data.models} onClose={() => setHistory(null)} />
       )}
       {confirm && <Confirm title={confirm.title} message={confirm.message} confirmLabel={confirm.confirmLabel} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
+      {showProduction && data && (
+        <ProductionWindow orders={data.production} models={data.models} isFounder={isFounder} onMessage={(msg) => setToast(msg)} onClose={() => setShowProduction(false)} />
+      )}
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
     </div>
   )

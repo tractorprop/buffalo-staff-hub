@@ -200,3 +200,21 @@ export interface AfterSalesQuery {
   updated_at: string
   resolved_at: string | null
 }
+
+// Machines and accessories ordered from the factory, still being built.
+export interface ProductionItem {
+  model_id: string
+  size: string | null
+  qty: number
+}
+export interface ProductionOrder {
+  id: string
+  ref: string
+  ready_date: string | null // expected to leave the factory
+  eta: string | null // expected arrival in the UK
+  items: ProductionItem[]
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
