@@ -205,9 +205,9 @@ export function ModelForm({
         <Field
           label="Low stock level"
           hint={(() => {
-            const d = defaultLowStock({ model_number: modelNumber, name, kind })
+            const d = defaultLowStock({ model_number: modelNumber, name, kind, category: (category || null) as Model['category'] })
             return d != null
-              ? `A warning shows when the number in stock is at or below this. Leave empty to use the default of ${d} (diggers, skid steers and attachments 10, dumpers 7).`
+              ? `A warning shows when the number in stock is at or below this. Leave empty to use the default of ${d} (diggers, skid steers and attachments 10, dumpers 7, tractor implements 4 per size).`
               : 'A warning shows when the number in stock is at or below this. Leave empty for no warning.'
           })()}
         >
@@ -216,7 +216,7 @@ export function ModelForm({
             min={0}
             inputMode="numeric"
             className={inputClass}
-            placeholder={defaultLowStock({ model_number: modelNumber, name, kind }) != null ? `Default: ${defaultLowStock({ model_number: modelNumber, name, kind })}` : ''}
+            placeholder={defaultLowStock({ model_number: modelNumber, name, kind, category: (category || null) as Model['category'] }) != null ? `Default: ${defaultLowStock({ model_number: modelNumber, name, kind, category: (category || null) as Model['category'] })}` : ''}
             value={reorder}
             onChange={(e) => setReorder(e.target.value)}
           />

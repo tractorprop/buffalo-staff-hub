@@ -3,7 +3,7 @@ import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
 import type { Machine, Model, ProductionOrder } from '../lib/types'
 import { fmtDate, today } from './ui'
-import { isMachine, lowStockLevel, modelLabel } from '../lib/modelLabel'
+import { isImplement, isMachine, lowStockLevel, modelLabel } from '../lib/modelLabel'
 
 export const linkClass = 'font-medium text-sky-700 underline dark:text-sky-300'
 
@@ -51,14 +51,19 @@ export function StockOverview({
 }) {
   const now = today()
   const d = useMemo(() => {
+    // Counts per model ("id") and per model and size ("id|size").
     const inStockBy = new Map<string, number>()
     const enRouteBy = new Map<string, number>()
-    for (const m of machines) {
-      if (m.status === 'in_stock') inStockBy.set(m.model_id, (inStockBy.get(m.model_id) ?? 0) + 1)
-      if (m.status === 'en_route') enRouteBy.set(m.model_id, (enRouteBy.get(m.model_id) ?? 0) + 1)
-    }
     const makingBy = new Map<string, number>()
-    for (const o of production) for (const i of o.items) makingBy.set(i.model_id, (makingBy.get(i.model_id) ?? 0) + i.qty)
+    const add = (map: Map<string, number>, id: string, size: string | null, n = 1) => {
+      map.set(id, (map.get(id) ?? 0) + n)
+      map.set(`${id}|${size ?? ''}`, (map.get(`${id}|${size ?? ''}`) ?? 0) + n)
+    }
+    for (const m of machines) {
+      if (m.status === 'in_stock') add(inStockBy, m.model_id, m.size)
+      if (m.status === 'en_route') add(enRouteBy, m.model_id, m.size)
+    }
+    for (const o of production) for (const i of o.items) add(makingBy, i.model_id, i.size, i.qty)
     const machineIds = new Set(models.filter(isMachine).map((m) => m.id))
     const onlyMachines = machines.filter((m) => machineIds.has(m.model_id))
     const containers = groupContainers(
@@ -72,12 +77,16 @@ export function StockOverview({
       soldThisMonth: onlyMachines.filter((m) => m.status === 'sold' && m.sold_date?.startsWith(now.slice(0, 7))).length,
       levelsSet: models.some((m) => lowStockLevel(m) != null),
       levelsMissing: models.length > 0 && models.every((m) => m.reorder_level === undefined),
+      // Tractor implements are checked size by size; everything else on its total.
       lowStock: models
-        .filter((m) => {
+        .flatMap((m) => {
           const level = lowStockLevel(m)
-          return level != null && (inStockBy.get(m.id) ?? 0) <= level
+          if (level == null) return []
+          const keys = isImplement(m) && m.sizes.length ? m.sizes.map((s) => ({ size: s as string | null, k: `${m.id}|${s}` })) : [{ size: null, k: m.id }]
+          return keys
+            .filter(({ k }) => (inStockBy.get(k) ?? 0) <= level)
+            .map(({ size, k }) => ({ model: m, size, level, inStock: inStockBy.get(k) ?? 0, enRoute: enRouteBy.get(k) ?? 0, making: makingBy.get(k) ?? 0 }))
         })
-        .map((m) => ({ model: m, inStock: inStockBy.get(m.id) ?? 0, enRoute: enRouteBy.get(m.id) ?? 0, making: makingBy.get(m.id) ?? 0 }))
         .sort((a, b) => a.inStock - b.inStock),
       arriving: containers.filter((c) => c.eta && c.eta <= addDays(now, 28)),
       noEta: containers.filter((c) => !c.eta).length,
@@ -107,14 +116,14 @@ export function StockOverview({
           ) : (
             <ul className="divide-y divide-red-100 text-sm dark:divide-red-900/50">
               {d.lowStock.map((l) => (
-                <li key={l.model.id} className="flex flex-wrap items-center gap-x-3 py-1.5">
+                <li key={`${l.model.id}|${l.size ?? ''}`} className="flex flex-wrap items-center gap-x-3 py-1.5">
                   <button onClick={() => onModel(l.model.id)} className="font-semibold hover:underline">
-                    {modelLabel(l.model, models)}
+                    {modelLabel(l.model, models, l.size)}
                   </button>
                   {l.model.name && <span className="text-slate-500">{l.model.name}</span>}
                   <span className="ml-auto">
                     <strong className={l.inStock === 0 ? 'text-red-600 dark:text-red-400' : ''}>{l.inStock}</strong> in stock
-                    <span className="text-slate-500"> (low at {lowStockLevel(l.model)})</span>
+                    <span className="text-slate-500"> (low at {l.level}{l.size ? ' per size' : ''})</span>
                     {l.enRoute > 0 && <span className="text-amber-700 dark:text-amber-400"> · {l.enRoute} on the way</span>}
                     {l.making > 0 && <span className="text-violet-700 dark:text-violet-400"> · {l.making} in production</span>}
                   </span>

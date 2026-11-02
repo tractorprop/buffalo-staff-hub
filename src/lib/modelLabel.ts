@@ -32,8 +32,15 @@ export function invoiceDescription(m: Model, models: Model[], size?: string | nu
 
 export const isMachine = (m: Pick<Model, 'kind'> | undefined) => m?.kind !== 'accessory'
 
+type LowStockInfo = Pick<Model, 'model_number' | 'name'> & Partial<Pick<Model, 'kind' | 'category' | 'reorder_level'>>
+
+// Tractor implements: agriculture models, or anything named "implement". Their low stock is checked per size.
+export const isImplement = (m: LowStockInfo) =>
+  m.kind !== 'accessory' && (m.category === 'Agriculture' || /implement/i.test(`${m.model_number} ${m.name ?? ''}`))
+
 // Default low stock levels, used when a model has no level of its own.
-export function defaultLowStock(m: Pick<Model, 'model_number' | 'name'> & Partial<Pick<Model, 'kind'>>): number | null {
+export function defaultLowStock(m: LowStockInfo): number | null {
+  if (isImplement(m)) return 4
   if (m.kind === 'accessory') return 10
   const text = `${m.model_number} ${m.name ?? ''}`.toLowerCase()
   if (/dumper/.test(text)) return 7
@@ -42,5 +49,4 @@ export function defaultLowStock(m: Pick<Model, 'model_number' | 'name'> & Partia
 }
 
 // The low stock level that applies: the model's own, otherwise the default for its type.
-export const lowStockLevel = (m: Pick<Model, 'model_number' | 'name'> & Partial<Pick<Model, 'kind' | 'reorder_level'>>) =>
-  m.reorder_level ?? defaultLowStock(m)
+export const lowStockLevel = (m: LowStockInfo) => m.reorder_level ?? defaultLowStock(m)
