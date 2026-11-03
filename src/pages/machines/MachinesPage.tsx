@@ -148,6 +148,9 @@ export function MachinesPage() {
     const p = new URLSearchParams(params)
     p.set('cat', c)
     setParams(p, { replace: true })
+    // Start each category tidy: close any models and accessory groups that were opened.
+    setOpen(new Set())
+    setOpenAcc(new Set())
   }
 
   const inStockOf = (id: string) => data?.machines.filter((m) => m.model_id === id && m.status === 'in_stock').length ?? 0
