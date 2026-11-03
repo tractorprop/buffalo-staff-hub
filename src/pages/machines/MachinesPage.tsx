@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, friendlyError } from '../../lib/supabase'
+import { selectAll } from '../../lib/selectAll'
 import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import type { Machine, MachineStatus, Model, WaitlistEntry, ContainerCheckin, ProductionOrder } from '../../lib/types'
@@ -33,7 +34,7 @@ interface Data {
 async function loadAll() {
   const [models, machines, waiting, checkins, production] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
-    supabase!.from('machines').select('*').order('created_at'),
+    selectAll(() => supabase!.from('machines').select('*').order('created_at').order('id')),
     supabase!.from('waitlist').select('*').eq('contacted', false).order('created_at'),
     supabase!.from('container_checkins').select('*').eq('status', 'pending').order('submitted_at'),
     supabase!.from('production_orders').select('*').order('eta', { nullsFirst: false }),

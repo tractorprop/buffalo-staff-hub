@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { supabase, friendlyError } from '../lib/supabase'
+import { selectAll } from '../lib/selectAll'
 import { useAuth } from '../auth/AuthProvider'
 import { useLive } from '../lib/useLive'
 import { personName, useProfiles } from '../lib/useProfiles'
@@ -23,13 +24,15 @@ export function useAuditLog(table: string, days: number) {
   return useLive<AuditEntry[]>(
     [table, 'audit_log'],
     () =>
-      supabase!
-        .from('audit_log')
-        .select('*')
-        .eq('table_name', table)
-        .gte('changed_at', new Date(Date.now() - days * 864e5).toISOString())
-        .order('changed_at')
-        .limit(20000),
+      selectAll<AuditEntry>(() =>
+        supabase!
+          .from('audit_log')
+          .select('*')
+          .eq('table_name', table)
+          .gte('changed_at', new Date(Date.now() - days * 864e5).toISOString())
+          .order('changed_at')
+          .order('id'),
+      ),
     [table, days],
   )
 }

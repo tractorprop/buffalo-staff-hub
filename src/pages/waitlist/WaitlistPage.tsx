@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, friendlyError } from '../../lib/supabase'
+import { selectAll } from '../../lib/selectAll'
 import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import { personName, useProfiles } from '../../lib/useProfiles'
@@ -23,7 +24,7 @@ async function loadAll() {
   const [models, entries, inStock] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
     supabase!.from('waitlist').select('*').order('created_at'),
-    supabase!.from('machines').select('model_id').eq('status', 'in_stock'),
+    selectAll(() => supabase!.from('machines').select('model_id').eq('status', 'in_stock').order('id')),
   ])
   const error = models.error ?? entries.error ?? inStock.error
   return {

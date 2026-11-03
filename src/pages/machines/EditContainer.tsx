@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
+import { selectAll } from '../../lib/selectAll'
 import type { Machine, Model } from '../../lib/types'
 import { labelFor } from '../../lib/modelLabel'
 import { Button, ErrorText, Field, Loading, Modal, inputClass } from '../../components/ui'
@@ -40,12 +41,9 @@ export function EditContainer({
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    supabase!
-      .from('machines')
-      .select('id, model_id, size, serial_number, location')
-      .eq('container_ref', containerRef)
-      .eq('status', 'en_route')
-      .then(({ data, error }) => {
+    selectAll<Item>(() =>
+      supabase!.from('machines').select('id, model_id, size, serial_number, location').eq('container_ref', containerRef).eq('status', 'en_route').order('id'),
+    ).then(({ data, error }) => {
         if (error) return setError(friendlyError(error))
         const items = data as Item[]
         const groups = new Map<string, Line>()

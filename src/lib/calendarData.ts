@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { selectAll } from './selectAll'
 import { addDays } from './dates'
 import { personName } from './useProfiles'
 import type { CalendarEvent, Holiday, Machine, Model, Profile } from './types'
@@ -28,7 +29,7 @@ export async function loadCalendar() {
   const [holidays, events, enRoute, models] = await Promise.all([
     supabase!.from('holidays').select('*').gte('end_date', since).order('start_date'),
     supabase!.from('events').select('*').gte('end_date', since).order('start_date'),
-    supabase!.from('machines').select('model_id, size, container_ref, eta').eq('status', 'en_route'),
+    selectAll(() => supabase!.from('machines').select('model_id, size, container_ref, eta').eq('status', 'en_route').order('id')),
     supabase!.from('models').select('*'),
   ])
   const error = holidays.error ?? enRoute.error ?? models.error

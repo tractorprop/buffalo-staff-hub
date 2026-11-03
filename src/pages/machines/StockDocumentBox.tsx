@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
+import { selectAll } from '../../lib/selectAll'
 import { useLive } from '../../lib/useLive'
 import type { StockDocument } from '../../lib/types'
 import { Button, Confirm, ErrorText, fmtDate } from '../../components/ui'
@@ -129,7 +130,7 @@ export async function moveDocumentToContainer(productionId: string, containerRef
 export async function cleanUpDocuments() {
   const { data, error } = await supabase!.from('stock_documents').select('*')
   if (error || !data?.length) return
-  const onTheWay = await supabase!.from('machines').select('container_ref').eq('status', 'en_route')
+  const onTheWay = await selectAll<{ container_ref: string | null }>(() => supabase!.from('machines').select('container_ref').eq('status', 'en_route').order('id'))
   if (onTheWay.error) return
   const refs = new Set((onTheWay.data as { container_ref: string | null }[]).map((m) => m.container_ref))
   const old = (data as StockDocument[]).filter((d) => !d.production_id && (!d.container_ref || !refs.has(d.container_ref)))

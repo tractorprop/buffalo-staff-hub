@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { selectAll } from '../lib/selectAll'
 import { useLive } from '../lib/useLive'
 import { useAuth } from '../auth/AuthProvider'
 import { personName, useProfiles } from '../lib/useProfiles'
@@ -24,7 +25,7 @@ interface Data {
 async function loadAll() {
   const [models, machines, waiting, tasks, calendar] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
-    supabase!.from('machines').select('model_id, size, status, sold_date, eta, container_ref'),
+    selectAll(() => supabase!.from('machines').select('model_id, size, status, sold_date, eta, container_ref').order('id')),
     supabase!.from('waitlist').select('model_id').eq('contacted', false),
     supabase!.from('tasks').select('*').eq('done', false),
     loadCalendar(),

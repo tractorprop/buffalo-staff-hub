@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
+import { selectAll } from '../../lib/selectAll'
 import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import { personName, useProfiles } from '../../lib/useProfiles'
@@ -83,11 +84,11 @@ async function loadAll(days: number) {
   const since = new Date(Date.now() - days * 864e5).toISOString()
   const [models, inStock, log, orders, links, sent] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
-    supabase!.from('machines').select('model_id, size').eq('status', 'in_stock'),
-    supabase!.from('audit_log').select('*').eq('table_name', 'machines').gte('changed_at', since).order('changed_at', { ascending: false }).limit(5000),
+    selectAll(() => supabase!.from('machines').select('model_id, size').eq('status', 'in_stock').order('id')),
+    selectAll(() => supabase!.from('audit_log').select('*').eq('table_name', 'machines').gte('changed_at', since).order('changed_at', { ascending: false }).order('id', { ascending: false })),
     supabase!.from('shopify_orders').select('*, id_text:id::text').order('ordered_at', { ascending: false }).limit(100),
     supabase!.from('shopify_links').select('*'),
-    supabase!.from('machines').select('stock_reference').like('stock_reference', 'Shopify #%'),
+    selectAll(() => supabase!.from('machines').select('stock_reference').like('stock_reference', 'Shopify #%').order('id')),
   ])
   const error = models.error ?? inStock.error ?? log.error
   return {
