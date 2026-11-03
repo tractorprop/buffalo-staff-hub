@@ -5,6 +5,7 @@ import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import type { Machine, MachineStatus, Model, WaitlistEntry, ContainerCheckin, ProductionOrder } from '../../lib/types'
 import { ProductionWindow } from './ProductionWindow'
+import { SetStockCount } from './SetStockCount'
 import { cleanUpDocuments } from './StockDocumentBox'
 import { Button, Confirm, CountPill, Empty, ErrorText, Loading, StatusBadge, Toast, fmtDate, inputClass, today } from '../../components/ui'
 import { ModelForm } from './ModelForm'
@@ -66,6 +67,7 @@ export function MachinesPage() {
   const [open, setOpen] = useState<Set<string>>(new Set(params.get('model') ? [params.get('model')!] : []))
 
   const [modelForm, setModelForm] = useState<{ model?: Model; accessoryFor?: string } | null>(null)
+  const [stockCount, setStockCount] = useState<Model | null>(null)
   const [machineForm, setMachineForm] = useState<{ machine?: Machine; modelId?: string } | null>(null)
   const [containerForm, setContainerForm] = useState(false)
   const [showContainers, setShowContainers] = useState<string | null | false>(false) // false = closed, null = open on the first
@@ -300,6 +302,9 @@ export function MachinesPage() {
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => setModelForm({ model: r.model })}>
                   Edit {r.model.kind === 'accessory' ? 'accessory' : 'model'}
+                </Button>
+                <Button size="sm" variant="primary" onClick={() => setStockCount(r.model)}>
+                  📦 Set stock count
                 </Button>
                 {r.model.kind !== 'accessory' && (
                   <Button size="sm" onClick={() => setModelForm({ accessoryFor: r.model.id })}>
@@ -700,6 +705,18 @@ export function MachinesPage() {
           confirmLabel={confirm.confirmLabel}
           onConfirm={confirm.run}
           onCancel={() => setConfirm(null)}
+        />
+      )}
+      {stockCount && data && (
+        <SetStockCount
+          model={stockCount}
+          models={data.models}
+          machines={data.machines}
+          onClose={() => setStockCount(null)}
+          onSaved={(msg) => {
+            setStockCount(null)
+            setToast(msg)
+          }}
         />
       )}
       {showProduction && data && (
