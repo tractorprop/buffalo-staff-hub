@@ -404,8 +404,8 @@ export function StockEntryPage() {
                           <span className="flex-1">
                             <strong>{item.title}</strong> <span className="text-slate-500">× {item.qty}</span>
                           </span>
-                          <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => removeUnlinked(item.key)}>
-                            Remove
+                          <Button size="sm" variant="danger" className="font-bold" onClick={() => removeUnlinked(item.key)}>
+                            ✕ Remove
                           </Button>
                         </div>
                       ),
@@ -460,9 +460,9 @@ export function StockEntryPage() {
                                 Load
                               </Button>
                               {isManager && (
-                                <button type="button" className="px-1 text-slate-400 hover:text-red-600" title="Remove from list (e.g. cancelled)" onClick={() => setRemoveOrder(o)}>
-                                  ×
-                                </button>
+                                <Button size="sm" variant="danger" className="font-bold" title="Remove from list (e.g. cancelled)" onClick={() => setRemoveOrder(o)}>
+                                  ✕
+                                </Button>
                               )}
                             </li>
                           )
@@ -555,12 +555,12 @@ export function StockEntryPage() {
                     onChange={(e) => update(l.key, { qty: parseInt(e.target.value) || 0 })}
                   />
                   {l.fromInvoice ? (
-                    <Button variant="ghost" className="text-red-600 dark:text-red-400" title="Not sending this item now" onClick={() => removeLine(l)}>
-                      Remove
+                    <Button variant="danger" className="font-bold" title="Not sending this item now" onClick={() => removeLine(l)}>
+                      ✕ Remove
                     </Button>
                   ) : (
-                    <Button variant="ghost" aria-label="Remove line" disabled={lines.length === 1 && !invoice} onClick={() => removeLine(l)}>
-                      ×
+                    <Button variant="danger" className="font-bold" aria-label="Remove line" disabled={lines.length === 1 && !invoice} onClick={() => removeLine(l)}>
+                      ✕ Remove
                     </Button>
                   )}
                 </div>
@@ -745,8 +745,8 @@ function LinkItem({
         <Button size="sm" onClick={() => onSave(item, null, null)}>
           Not a stock item
         </Button>
-        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" title="Not sending it now (the link isn't saved)" onClick={onRemove}>
-          Remove
+        <Button size="sm" variant="danger" className="font-bold" title="Not sending it now (the link isn't saved)" onClick={onRemove}>
+          ✕ Remove
         </Button>
       </div>
     </div>
