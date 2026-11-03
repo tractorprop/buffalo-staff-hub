@@ -3,7 +3,7 @@ import type { Customer } from './invoiceDocument'
 
 export const emptyCustomer: Customer = { name: '', address: '', phone: '', email: '' }
 
-// Customer details only ever go onto the PDF; they are never saved.
+// Customer details go onto the PDF. Only the name is saved (for the invoice history).
 export function CustomerFields({ value, onChange }: { value: Customer; onChange: (c: Customer) => void }) {
   const set = (k: keyof Customer) => (e: { target: { value: string } }) => onChange({ ...value, [k]: e.target.value })
   return (
@@ -24,7 +24,7 @@ export function CustomerFields({ value, onChange }: { value: Customer; onChange:
           <input type="email" className={inputClass} value={value.email} onChange={set('email')} autoComplete="off" />
         </Field>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400">🔒 Customer details are not saved anywhere. They only go on the PDF.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">🔒 Only the customer's name is saved (for the invoice history). Address, phone and email only go on the PDF.</p>
     </div>
   )
 }

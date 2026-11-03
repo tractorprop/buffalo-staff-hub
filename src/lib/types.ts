@@ -155,6 +155,7 @@ export interface Invoice {
   total: number
   created_by: string | null
   created_at: string
+  customer_name?: string | null // name only (after 21-invoice-customer-name.sql); no other customer details are stored
 }
 
 // A container check-in submitted by staff, waiting for a manager to approve it.

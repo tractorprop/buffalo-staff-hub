@@ -21,7 +21,11 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
 
   const q = search.trim().toLowerCase().replace(/^bm-?/, '')
   const list = data.invoices.filter(
-    (i) => !q || String(i.number).includes(q) || i.lines.some((l) => l.description.toLowerCase().includes(q)),
+    (i) =>
+      !q ||
+      String(i.number).includes(q) ||
+      (i.customer_name ?? '').toLowerCase().includes(search.trim().toLowerCase()) ||
+      i.lines.some((l) => l.description.toLowerCase().includes(q)),
   )
 
   function print() {
@@ -41,7 +45,7 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
 
   return (
     <div className="space-y-3">
-      <input className={inputClass} placeholder="Search invoice number (e.g. 1001) or item…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <input className={inputClass} placeholder="Search invoice number (e.g. 1001), customer name or item…" value={search} onChange={(e) => setSearch(e.target.value)} />
       {list.length === 0 ? (
         <Empty title={search ? 'No invoices match' : 'No invoices yet'}>{!search && 'Create one on the New invoice tab.'}</Empty>
       ) : (
@@ -51,6 +55,7 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-3">
                   <span className="font-bold">{invoiceNumber(i.number)}</span>
+                  {i.customer_name && <span className="font-semibold">{i.customer_name}</span>}
                   <span className="text-slate-500">{fmtDate(i.invoice_date)}</span>
                   <span className="font-semibold">{money(i.total)}</span>
                   <span className="text-xs text-slate-500">by {personName(profiles, i.created_by)}</span>
@@ -64,7 +69,7 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
                   size="sm"
                   onClick={() => {
                     setReprint(i)
-                    setCustomer(emptyCustomer)
+                    setCustomer({ ...emptyCustomer, name: i.customer_name ?? '' })
                     setError('')
                   }}
                 >
@@ -80,13 +85,13 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
           ))}
         </ul>
       )}
-      <p className="text-xs text-slate-500 dark:text-slate-400">Showing the latest 500 invoices. Customer details are never stored, so a reprint asks for them again.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">Showing the latest 500 invoices. Only the customer's name is stored, so a reprint asks for the address and contact details again.</p>
 
       {reprint && (
         <Modal title={`Reprint ${invoiceNumber(reprint.number)}`} onClose={() => setReprint(null)}>
           <div className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Same number, date, items and totals as the original ({money(reprint.total)}). Enter the customer details again.
+              Same number, date, items and totals as the original ({money(reprint.total)}). Check the name and enter the rest of the customer details again.
             </p>
             <CustomerFields value={customer} onChange={setCustomer} />
             <ErrorText>{error}</ErrorText>

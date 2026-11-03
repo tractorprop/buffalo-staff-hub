@@ -123,11 +123,14 @@ export function NewInvoice({ data }: { data: SalesData }) {
       })),
       ...extras,
     ]
-    const { data: inv, error } = await supabase
-      .from('invoices')
-      .insert({ invoice_date: date, lines: clean, ...totals })
-      .select()
-      .single()
+    const row = { invoice_date: date, lines: clean, ...totals, customer_name: customer.name.trim() || null }
+    let res = await supabase.from('invoices').insert(row).select().single()
+    // Before 21-invoice-customer-name.sql there's no name column: save without it.
+    if (res.error && /customer_name/.test(res.error.message)) {
+      const { customer_name: _, ...withoutName } = row
+      res = await supabase.from('invoices').insert(withoutName).select().single()
+    }
+    const { data: inv, error } = res
     setBusy(false)
     if (error || !inv) {
       win.close()
