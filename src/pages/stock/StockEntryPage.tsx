@@ -555,11 +555,11 @@ export function StockEntryPage() {
                     onChange={(e) => update(l.key, { qty: parseInt(e.target.value) || 0 })}
                   />
                   {l.fromInvoice ? (
-                    <Button variant="danger" className="font-bold" title="Not sending this item now" onClick={() => removeLine(l)}>
+                    <Button size="sm" variant="danger" className="font-bold" title="Not sending this item now" onClick={() => removeLine(l)}>
                       ✕ Remove
                     </Button>
                   ) : (
-                    <Button variant="danger" className="font-bold" aria-label="Remove line" disabled={lines.length === 1 && !invoice} onClick={() => removeLine(l)}>
+                    <Button size="sm" variant="danger" className="font-bold" aria-label="Remove line" disabled={lines.length === 1 && !invoice} onClick={() => removeLine(l)}>
                       ✕ Remove
                     </Button>
                   )}
