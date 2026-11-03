@@ -18,7 +18,7 @@ import { MachineHistory } from './MachineHistory'
 import { ReviewCheckin } from './ReviewCheckin'
 import { ContainersWindow } from './ContainersWindow'
 import { StockOverview } from '../../components/StockOverview'
-import { isMachine, modelLabel } from '../../lib/modelLabel'
+import { isCountedMachine, isMachine, modelLabel } from '../../lib/modelLabel'
 
 type Filter = 'all' | MachineStatus
 type Sort = 'model' | 'in_stock' | 'waiting'
@@ -169,8 +169,8 @@ export function MachinesPage() {
   }
 
   const totals = useMemo(() => {
-    // Counts are for machines only, not accessories.
-    const machineIds = new Set((data?.models ?? []).filter(isMachine).map((m) => m.id))
+    // Counts are for Construction, Forestry and Agriculture machines only, not attachments.
+    const machineIds = new Set((data?.models ?? []).filter(isCountedMachine).map((m) => m.id))
     const ms = (data?.machines ?? []).filter((m) => machineIds.has(m.model_id))
     return {
       all: machineIds.size,

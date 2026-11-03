@@ -3,7 +3,7 @@ import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
 import type { Machine, Model, ProductionOrder } from '../lib/types'
 import { Modal, fmtDate, inputClass, today } from './ui'
-import { isImplement, isMachine, lowStockLevel, modelLabel } from '../lib/modelLabel'
+import { MACHINE_CATEGORIES, isCountedMachine, isImplement, isMachine, lowStockLevel, modelLabel } from '../lib/modelLabel'
 
 export const linkClass = 'font-medium text-sky-700 underline dark:text-sky-300'
 
@@ -34,7 +34,7 @@ export function Card({
   )
 }
 
-function Stat({ label, value, onClick, tone }: { label: string; value: number; onClick: () => void; tone: string }) {
+function Stat({ label, value, onClick, tone, detail }: { label: string; value: number; onClick: () => void; tone: string; detail?: string }) {
   return (
     <button
       onClick={onClick}
@@ -42,6 +42,7 @@ function Stat({ label, value, onClick, tone }: { label: string; value: number; o
     >
       <div className={`text-2xl font-bold ${tone}`}>{value}</div>
       <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
+      {detail && <div className="mt-1 text-[11px] text-slate-400">{detail}</div>}
     </button>
   )
 }
@@ -77,17 +78,30 @@ export function StockOverview({
       if (m.status === 'en_route') add(enRouteBy, m.model_id, m.size)
     }
     for (const o of production) for (const i of o.items) add(makingBy, i.model_id, i.size, i.qty)
-    const machineIds = new Set(models.filter(isMachine).map((m) => m.id))
-    const onlyMachines = machines.filter((m) => machineIds.has(m.model_id))
+    const categoryOf = new Map(models.filter(isCountedMachine).map((m) => [m.id, m.category!]))
+    const onlyMachines = machines.filter((m) => categoryOf.has(m.model_id))
+    const thisMonth = (m: (typeof machines)[number]) => m.status === 'sold' && !!m.sold_date?.startsWith(now.slice(0, 7))
+    // "Construction 120 · Forestry 10 · Agriculture 89"
+    const split = (keep: (m: (typeof machines)[number]) => boolean) =>
+      MACHINE_CATEGORIES.map((c) => [c, onlyMachines.filter((m) => keep(m) && categoryOf.get(m.model_id) === c).length] as const)
+        .filter(([, n]) => n > 0)
+        .map(([c, n]) => `${c} ${n}`)
+        .join(' · ')
+    // Machine models with no category and some stock: probably attachments saved as machines.
+    const uncategorised = models.filter((m) => isMachine(m) && !isCountedMachine(m) && machines.some((x) => x.model_id === m.id && x.status !== 'sold'))
     const containers = groupContainers(
       machines.filter((m) => m.status === 'en_route'),
       models,
     )
     return {
-      // Totals count machines only, not accessories.
+      // Totals count Construction, Forestry and Agriculture machines only: no attachments.
       inStock: onlyMachines.filter((m) => m.status === 'in_stock').length,
       enRoute: onlyMachines.filter((m) => m.status === 'en_route').length,
-      soldThisMonth: onlyMachines.filter((m) => m.status === 'sold' && m.sold_date?.startsWith(now.slice(0, 7))).length,
+      soldThisMonth: onlyMachines.filter(thisMonth).length,
+      inStockSplit: split((m) => m.status === 'in_stock'),
+      enRouteSplit: split((m) => m.status === 'en_route'),
+      soldSplit: split(thisMonth),
+      uncategorised,
       levelsSet: models.some((m) => lowStockLevel(m) != null),
       levelsMissing: models.length > 0 && models.every((m) => m.reorder_level === undefined),
       // Tractor implements are checked size by size; everything else on its total.
@@ -132,10 +146,25 @@ export function StockOverview({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="In stock" value={d.inStock} onClick={() => onStatus('in_stock')} tone="text-green-700 dark:text-green-400" />
-        <Stat label="🚢 En route" value={d.enRoute} onClick={() => onStatus('en_route')} tone="text-amber-600 dark:text-amber-400" />
-        <Stat label="Sold this month" value={d.soldThisMonth} onClick={() => onStatus('sold')} tone="text-slate-700 dark:text-slate-300" />
+        <Stat label="Machines in stock" value={d.inStock} detail={d.inStockSplit} onClick={() => onStatus('in_stock')} tone="text-green-700 dark:text-green-400" />
+        <Stat label="🚢 Machines en route" value={d.enRoute} detail={d.enRouteSplit} onClick={() => onStatus('en_route')} tone="text-amber-600 dark:text-amber-400" />
+        <Stat label="Machines sold this month" value={d.soldThisMonth} detail={d.soldSplit} onClick={() => onStatus('sold')} tone="text-slate-700 dark:text-slate-300" />
       </div>
+
+      {d.uncategorised.length > 0 && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+          ⚠️ Not counted above, because they're saved as machines with <strong>no category</strong>:{' '}
+          {d.uncategorised.map((m, i) => (
+            <span key={m.id}>
+              {i > 0 && ', '}
+              <button onClick={() => onModel(m.id)} className="font-semibold underline">
+                {modelLabel(m, models)}
+              </button>
+            </span>
+          ))}
+          . If these are attachments, open them, click <strong>Edit model</strong> and choose <strong>Accessory</strong>; if they're machines, choose their category.
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={`⚠️ Low stock: needs ordering${d.lowStock.length ? ` (${d.lowStock.length})` : ''}`} tone={d.lowStock.length ? 'warn' : 'default'}>

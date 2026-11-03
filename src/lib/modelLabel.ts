@@ -32,6 +32,12 @@ export function invoiceDescription(m: Model, models: Model[], size?: string | nu
 
 export const isMachine = (m: Pick<Model, 'kind'> | undefined) => m?.kind !== 'accessory'
 
+// Machines counted in the stock totals: machine models in Construction, Forestry or Agriculture.
+// (Accessories, and "machines" with no category, which are usually attachments saved the wrong way, aren't counted.)
+export const MACHINE_CATEGORIES = ['Construction', 'Forestry', 'Agriculture'] as const
+export const isCountedMachine = (m: Pick<Model, 'kind'> & Partial<Pick<Model, 'category'>>) =>
+  isMachine(m) && MACHINE_CATEGORIES.some((c) => c === m.category)
+
 type LowStockInfo = Pick<Model, 'model_number' | 'name'> & Partial<Pick<Model, 'kind' | 'category' | 'reorder_level'>>
 
 // Tractor implements: agriculture models, or anything named "implement". Their low stock is checked per size.
