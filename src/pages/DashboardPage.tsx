@@ -17,7 +17,7 @@ interface Data {
   models: Model[]
   machines: Pick<Machine, 'model_id' | 'size' | 'status' | 'sold_date' | 'eta' | 'container_ref'>[]
   waiting: { model_id: string }[]
-  openTasks: { assignee_id: string | null; due_date: string | null }[]
+  openTasks: { assignee_id: string | null; due_date: string | null; start_date?: string | null }[]
   calendar: CalendarData
 }
 
@@ -26,7 +26,7 @@ async function loadAll() {
     supabase!.from('models').select('*').order('model_number'),
     supabase!.from('machines').select('model_id, size, status, sold_date, eta, container_ref'),
     supabase!.from('waitlist').select('model_id').eq('contacted', false),
-    supabase!.from('tasks').select('assignee_id, due_date').eq('done', false),
+    supabase!.from('tasks').select('*').eq('done', false),
     loadCalendar(),
   ])
   const error = models.error ?? machines.error ?? waiting.error ?? tasks.error ?? calendar.error
@@ -67,9 +67,11 @@ export function DashboardPage() {
       data.models,
     )
     const leave = data.calendar.holidays.filter((h) => h.status === 'approved')
-    const mine = data.openTasks.filter((t) => t.assignee_id === profile?.id)
+    const mineAll = data.openTasks.filter((t) => t.assignee_id === profile?.id)
+    const mine = mineAll.filter((t) => !t.start_date || t.start_date <= now)
     return {
       myTasks: mine.length,
+      myLater: mineAll.length - mine.length,
       myOverdue: mine.filter((t) => t.due_date && t.due_date < now).length,
       myToday: mine.filter((t) => t.due_date === now).length,
       offToday: leave.filter((h) => overlaps(h.start_date, h.end_date, now, now)),
@@ -150,8 +152,9 @@ export function DashboardPage() {
               <span className={`text-3xl font-bold ${d.myOverdue ? 'text-red-600 dark:text-red-400' : ''}`}>{d.myTasks}</span>
               <span className="text-sm">
                 <span className="block font-medium">
-                  {d.myTasks === 0 ? 'Nothing to do 🎉' : `task${d.myTasks === 1 ? '' : 's'} to do`}
+                  {d.myTasks === 0 ? 'Nothing to do now 🎉' : `task${d.myTasks === 1 ? '' : 's'} to do now`}
                 </span>
+                {d.myLater > 0 && <span className="block text-slate-500 dark:text-slate-400">{d.myLater} starting later</span>}
                 {(d.myOverdue > 0 || d.myToday > 0) && (
                   <span className="block">
                     {d.myOverdue > 0 && <span className="font-semibold text-red-600 dark:text-red-400">{d.myOverdue} overdue</span>}

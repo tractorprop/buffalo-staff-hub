@@ -66,6 +66,7 @@ export interface Task {
   id: string
   title: string
   assignee_id: string | null
+  start_date?: string | null // after 22-task-start-date.sql
   due_date: string | null
   priority: Priority
   done: boolean

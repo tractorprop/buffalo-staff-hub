@@ -18,6 +18,7 @@ export function TaskForm({
 }) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [assignee, setAssignee] = useState(task ? task.assignee_id ?? '' : defaultAssignee ?? '')
+  const [start, setStart] = useState(task?.start_date ?? '')
   const [due, setDue] = useState(task?.due_date ?? '')
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'Normal')
   const [error, setError] = useState('')
@@ -26,14 +27,18 @@ export function TaskForm({
   async function save(e: FormEvent) {
     e.preventDefault()
     if (!supabase) return
+    if (start && due && start > due) return setError('The start date is after the due date.')
     setBusy(true)
     setError('')
-    const row = { title: title.trim(), assignee_id: assignee || null, due_date: due || null, priority }
+    const row: Record<string, unknown> = { title: title.trim(), assignee_id: assignee || null, due_date: due || null, priority }
+    // Only send the start date once the database has that column (or one was chosen).
+    if (start || task?.start_date !== undefined) row.start_date = start || null
     const { error } = task
       ? await supabase.from('tasks').update(row).eq('id', task.id)
       : await supabase.from('tasks').insert(row)
     setBusy(false)
-    if (error) return setError(friendlyError(error))
+    if (error)
+      return setError(/start_date/.test(error.message) ? 'Start dates are not switched on yet. The founder needs to run database/22-task-start-date.sql in Supabase.' : friendlyError(error))
     onClose()
   }
 
@@ -54,9 +59,14 @@ export function TaskForm({
           </select>
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Due date">
-            <input type="date" className={inputClass} value={due} onChange={(e) => setDue(e.target.value)} />
+          <Field label="Start date" hint="Leave empty to start straight away.">
+            <input type="date" className={inputClass} value={start} onChange={(e) => setStart(e.target.value)} />
           </Field>
+          <Field label="Due date">
+            <input type="date" className={inputClass} min={start || undefined} value={due} onChange={(e) => setDue(e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Priority">
             <select className={inputClass} value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
               <option>Low</option>

@@ -51,7 +51,9 @@ export function TasksPage() {
     return map
   }, [data])
   const allOpen = [...openCount.values()].reduce((a, b) => a + b, 0)
-  const mine = (data?.tasks ?? []).filter((t) => !t.done && t.assignee_id === profile?.id)
+  const mineAll = (data?.tasks ?? []).filter((t) => !t.done && t.assignee_id === profile?.id)
+  const mine = mineAll.filter((t) => !t.start_date || t.start_date <= now)
+  const mineLater = mineAll.length - mine.length
   const mineOverdue = mine.filter((t) => t.due_date && t.due_date < now).length
   const mineToday = mine.filter((t) => t.due_date === now).length
 
@@ -102,8 +104,77 @@ export function TasksPage() {
     </button>
   )
 
-  const heading =
-    who === 'all' ? 'Everyone' : who === 'none' ? 'Not assigned' : who === profile?.id ? 'My tasks' : personName(profiles, who)
+  // To do now = start date reached (or none); Starting later = start date in the future.
+  const started = (t: Task) => !t.start_date || t.start_date <= now
+  const nowList = showDone ? list : list.filter(started)
+  const laterList = showDone ? [] : list.filter((t) => !started(t)).sort((a, b) => a.start_date!.localeCompare(b.start_date!))
+  const renderTask = (t: Task) => {
+    const overdue = !t.done && t.due_date && t.due_date < now
+    const model = t.related_model && data?.models.find((m) => m.model_number === t.related_model)
+    const canComplete = !t.assignee_id || t.assignee_id === profile?.id
+    const canDelete = isManager || !t.assignee_id || t.assignee_id === profile?.id
+    const asking = confirmDone === t.id
+    return (
+      <li key={t.id} className={`flex items-start gap-3 px-4 py-3 ${overdue ? 'bg-red-50 dark:bg-red-950/30' : ''}`}>
+        <input
+          type="checkbox"
+          checked={t.done || asking}
+          disabled={!canComplete}
+          onChange={(e) => (e.target.checked ? setConfirmDone(t.id) : asking ? setConfirmDone(null) : setDone(t, false))}
+          className="mt-1 h-5 w-5 shrink-0 accent-green-600 disabled:cursor-not-allowed disabled:opacity-40"
+          title={canComplete ? undefined : `Only ${personName(profiles, t.assignee_id)} can complete this task`}
+          aria-label={t.done ? 'Mark as not done' : 'Mark as completed'}
+        />
+        <div className="min-w-0 flex-1">
+          <div className={`font-medium ${t.done ? 'text-slate-400 line-through' : ''}`}>{t.title}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+            <span className={`rounded-full px-2 py-0.5 font-medium ${priorityClass[t.priority]}`}>{t.priority}</span>
+            {who === 'all' && <span>👤 {t.assignee_id ? personName(profiles, t.assignee_id) : 'Not assigned'}</span>}
+            {t.start_date && (
+              <span className={!t.done && t.start_date > now ? 'font-semibold text-sky-700 dark:text-sky-300' : ''}>
+                {t.start_date > now ? 'Starts ' : 'Started '}
+                {fmtDate(t.start_date)}
+              </span>
+            )}
+            {t.due_date && (
+              <span className={overdue ? 'font-semibold text-red-600 dark:text-red-400' : ''}>
+                {overdue ? 'Overdue: ' : 'Due '}
+                {fmtDate(t.due_date)}
+              </span>
+            )}
+            {model && (
+              <Link to={`/waitlist?model=${model.id}`} className="font-medium text-sky-700 underline dark:text-sky-300">
+                See waiting customers for {model.model_number} →
+              </Link>
+            )}
+          </div>
+          {asking && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-green-300 bg-green-50 p-2 text-sm dark:border-green-900 dark:bg-green-950/40">
+              <span className="font-medium">Has this job been completed?</span>
+              <Button size="sm" variant="primary" onClick={() => setDone(t, true)}>
+                Yes, it's completed
+              </Button>
+              <Button size="sm" onClick={() => setConfirmDone(null)}>
+                Not yet
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <Button size="sm" variant="ghost" onClick={() => setForm({ task: t })}>
+            Edit
+          </Button>
+          {canDelete && (
+            <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirm(t)}>
+              Delete
+            </Button>
+          )}
+        </div>
+      </li>
+    )
+  }
+
+  const heading = who === 'all' ? 'Everyone' : who === 'none' ? 'Not assigned' : who === profile?.id ? 'My tasks' : personName(profiles, who)
 
   return (
     <div className="space-y-4">
@@ -128,7 +199,8 @@ export function TasksPage() {
           <span className="text-3xl font-bold">{mine.length}</span>
           <span>
             <span className="block font-semibold">
-              {mine.length === 0 ? 'You have no tasks to do 🎉' : `You have ${mine.length} task${mine.length === 1 ? '' : 's'} to do`}
+              {mine.length === 0 ? 'You have no tasks to do now 🎉' : `You have ${mine.length} task${mine.length === 1 ? '' : 's'} to do now`}
+              {mineLater > 0 && <span className="font-normal text-slate-600 dark:text-slate-300"> · {mineLater} starting later</span>}
             </span>
             {(mineOverdue > 0 || mineToday > 0) && (
               <span className="block text-sm">
@@ -170,67 +242,22 @@ export function TasksPage() {
       ) : list.length === 0 ? (
         <Empty title={showDone ? 'No completed tasks' : 'Nothing to do 🎉'}>{!showDone && 'Click "+ Add task" to create one.'}</Empty>
       ) : (
-        <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-          {list.map((t) => {
-            const overdue = !t.done && t.due_date && t.due_date < now
-            const model = t.related_model && data?.models.find((m) => m.model_number === t.related_model)
-            const canComplete = !t.assignee_id || t.assignee_id === profile?.id
-            const canDelete = isManager || !t.assignee_id || t.assignee_id === profile?.id
-            const asking = confirmDone === t.id
-            return (
-              <li key={t.id} className={`flex items-start gap-3 px-4 py-3 ${overdue ? 'bg-red-50 dark:bg-red-950/30' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={t.done || asking}
-                  disabled={!canComplete}
-                  onChange={(e) => (e.target.checked ? setConfirmDone(t.id) : asking ? setConfirmDone(null) : setDone(t, false))}
-                  className="mt-1 h-5 w-5 shrink-0 accent-green-600 disabled:cursor-not-allowed disabled:opacity-40"
-                  title={canComplete ? undefined : `Only ${personName(profiles, t.assignee_id)} can complete this task`}
-                  aria-label={t.done ? 'Mark as not done' : 'Mark as completed'}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className={`font-medium ${t.done ? 'text-slate-400 line-through' : ''}`}>{t.title}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                    <span className={`rounded-full px-2 py-0.5 font-medium ${priorityClass[t.priority]}`}>{t.priority}</span>
-                    {who === 'all' && <span>👤 {t.assignee_id ? personName(profiles, t.assignee_id) : 'Not assigned'}</span>}
-                    {t.due_date && (
-                      <span className={overdue ? 'font-semibold text-red-600 dark:text-red-400' : ''}>
-                        {overdue ? 'Overdue: ' : 'Due '}
-                        {fmtDate(t.due_date)}
-                      </span>
-                    )}
-                    {model && (
-                      <Link to={`/waitlist?model=${model.id}`} className="font-medium text-sky-700 underline dark:text-sky-300">
-                        See waiting customers for {model.model_number} →
-                      </Link>
-                    )}
-                  </div>
-                  {asking && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-green-300 bg-green-50 p-2 text-sm dark:border-green-900 dark:bg-green-950/40">
-                      <span className="font-medium">Has this job been completed?</span>
-                      <Button size="sm" variant="primary" onClick={() => setDone(t, true)}>
-                        Yes, it's completed
-                      </Button>
-                      <Button size="sm" onClick={() => setConfirmDone(null)}>
-                        Not yet
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => setForm({ task: t })}>
-                    Edit
-                  </Button>
-                  {canDelete && (
-                    <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirm(t)}>
-                      Delete
-                    </Button>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          {nowList.length > 0 && (
+            <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+              {nowList.map(renderTask)}
+            </ul>
+          )}
+          {!showDone && nowList.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">Nothing to start yet 🎉</p>}
+          {laterList.length > 0 && (
+            <>
+              <h3 className="pt-2 font-semibold">🗓️ Starting later ({laterList.length})</h3>
+              <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white opacity-80 dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+                {laterList.map(renderTask)}
+              </ul>
+            </>
+          )}
+        </>
       )}
 
       {form && (
