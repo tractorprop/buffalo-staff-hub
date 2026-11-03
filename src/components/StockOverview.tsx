@@ -3,7 +3,7 @@ import { groupContainers } from '../lib/calendarData'
 import { addDays } from '../lib/dates'
 import type { Machine, Model, ProductionOrder } from '../lib/types'
 import { Modal, fmtDate, inputClass, today } from './ui'
-import { MACHINE_CATEGORIES, isCountedMachine, isImplement, isMachine, lowStockLevel, modelLabel } from '../lib/modelLabel'
+import { MACHINE_CATEGORIES, isCountedMachine, isImplement, isMachine, looksLikeAttachment, lowStockLevel, modelLabel } from '../lib/modelLabel'
 
 export const linkClass = 'font-medium text-sky-700 underline dark:text-sky-300'
 
@@ -102,6 +102,17 @@ export function StockOverview({
       enRouteSplit: split((m) => m.status === 'en_route'),
       soldSplit: split(thisMonth),
       uncategorised,
+      // Every machine model behind the totals, with its stock, for "See what's counted".
+      counted: models
+        .filter(isCountedMachine)
+        .map((m) => ({
+          model: m,
+          inStock: onlyMachines.filter((x) => x.model_id === m.id && x.status === 'in_stock').length,
+          enRoute: onlyMachines.filter((x) => x.model_id === m.id && x.status === 'en_route').length,
+          suspect: looksLikeAttachment(m),
+        }))
+        .filter((r) => r.inStock + r.enRoute > 0)
+        .sort((a, b) => b.inStock + b.enRoute - (a.inStock + a.enRoute)),
       levelsSet: models.some((m) => lowStockLevel(m) != null),
       levelsMissing: models.length > 0 && models.every((m) => m.reorder_level === undefined),
       // Tractor implements are checked size by size; everything else on its total.
@@ -122,6 +133,7 @@ export function StockOverview({
   }, [models, machines, now, production])
 
   const [showAll, setShowAll] = useState(false)
+  const [showCounted, setShowCounted] = useState(false)
   const [lowSearch, setLowSearch] = useState('')
   type Low = (typeof d.lowStock)[number]
   const lowRow = (l: Low) => (
@@ -151,6 +163,59 @@ export function StockOverview({
         <Stat label="Machines sold this month" value={d.soldThisMonth} detail={d.soldSplit} onClick={() => onStatus('sold')} tone="text-slate-700 dark:text-slate-300" />
       </div>
 
+      {(() => {
+        const suspects = d.counted.filter((r) => r.suspect)
+        return (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            {suspects.length > 0 && (
+              <span className="font-semibold text-red-600 dark:text-red-400">
+                ⚠️ {suspects.length} item{suspects.length === 1 ? ' looks like an attachment' : 's look like attachments'} but {suspects.length === 1 ? 'is' : 'are'} counted as machines.
+              </span>
+            )}
+            <button onClick={() => setShowCounted(true)} className={linkClass}>
+              🔎 See what's counted
+            </button>
+          </div>
+        )
+      })()}
+      {showCounted && (
+        <Modal title="🔎 Machines counted in the figures above" onClose={() => setShowCounted(false)} wide>
+          <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+            These are saved as <strong>machines</strong>. If any are really attachments, click the name, then <strong>Edit model</strong>, choose{' '}
+            <strong>Accessory</strong> and tick the machines it fits. It then stops counting here.
+          </p>
+          <div className="space-y-5">
+            {[
+              ['⚠️ Look like attachments', d.counted.filter((r) => r.suspect)] as const,
+              ...MACHINE_CATEGORIES.map((c) => [c, d.counted.filter((r) => !r.suspect && r.model.category === c)] as const),
+            ]
+              .filter(([, rows]) => rows.length)
+              .map(([label, rows]) => (
+                <section key={label}>
+                  <h3
+                    className={`mb-1 border-b-2 pb-1 font-bold ${label.startsWith('⚠️') ? 'border-red-300 text-red-700 dark:text-red-400' : 'border-slate-200 dark:border-slate-700'}`}
+                  >
+                    {label} <span className="font-normal text-slate-500">({rows.length})</span>
+                  </h3>
+                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                    {rows.map((r) => (
+                      <li key={r.model.id} className="flex flex-wrap items-center gap-x-3 py-1.5">
+                        <button onClick={() => (setShowCounted(false), onModel(r.model.id))} className="font-semibold hover:underline">
+                          {modelLabel(r.model, models)}
+                        </button>
+                        {r.model.name && <span className="text-slate-500">{r.model.name}</span>}
+                        {label.startsWith('⚠️') && <span className="text-xs text-slate-500">{r.model.category}</span>}
+                        <span className="ml-auto">
+                          <strong>{r.inStock}</strong> in stock{r.enRoute > 0 && <span className="text-amber-700 dark:text-amber-400"> · {r.enRoute} en route</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+          </div>
+        </Modal>
+      )}
       {d.uncategorised.length > 0 && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/30">
           ⚠️ Not counted above, because they're saved as machines with <strong>no category</strong>:{' '}
