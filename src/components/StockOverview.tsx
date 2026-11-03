@@ -189,15 +189,42 @@ export function StockOverview({
       {showAll && (
         <Modal title={`⚠️ Low stock: needs ordering (${d.lowStock.length})`} onClose={() => setShowAll(false)} wide>
           <input className={`${inputClass} mb-3`} placeholder="Search…" autoFocus value={lowSearch} onChange={(e) => setLowSearch(e.target.value)} />
-          <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-            {d.lowStock
-              .filter((l) => !lowSearch.trim() || modelLabel(l.model, models, l.size).toLowerCase().includes(lowSearch.trim().toLowerCase()))
-              .map(lowRow)}
-          </ul>
+          {(() => {
+            const q = lowSearch.trim().toLowerCase()
+            const found = d.lowStock.filter((l) => !q || modelLabel(l.model, models, l.size).toLowerCase().includes(q))
+            // An accessory belongs to the category of the (first) machine it fits.
+            const categoryOf = (m: Model) => (isMachine(m) ? m.category : models.find((x) => x.id === m.fits_models?.[0])?.category) ?? null
+            const sections: [string, typeof found][] = [
+              ...CATEGORIES.map(([c, label]) => [label, found.filter((l) => isMachine(l.model) && categoryOf(l.model) === c)] as [string, typeof found]),
+              ['Other machines', found.filter((l) => isMachine(l.model) && !CATEGORIES.some(([c]) => c === categoryOf(l.model)))],
+              ...CATEGORIES.map(([c, label]) => [`🔧 Accessories · ${label.replace(/^\S+ /, '').replace(' machines', '')}`, found.filter((l) => !isMachine(l.model) && categoryOf(l.model) === c)] as [string, typeof found]),
+              ['🔧 Accessories · other', found.filter((l) => !isMachine(l.model) && !CATEGORIES.some(([c]) => c === categoryOf(l.model)))],
+            ]
+            const shown = sections.filter(([, rows]) => rows.length)
+            if (!shown.length) return <p className="py-4 text-sm text-slate-500">Nothing matches your search.</p>
+            return (
+              <div className="space-y-5">
+                {shown.map(([label, rows]) => (
+                  <section key={label}>
+                    <h3 className="mb-1 border-b-2 border-slate-200 pb-1 font-bold dark:border-slate-700">
+                      {label} <span className="font-normal text-slate-500">({rows.length})</span>
+                    </h3>
+                    <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">{rows.map(lowRow)}</ul>
+                  </section>
+                ))}
+              </div>
+            )
+          })()}
         </Modal>
       )}
     </div>
   )
 }
+
+const CATEGORIES = [
+  ['Construction', '🏗️ Construction machines'],
+  ['Forestry', '🌲 Forestry machines'],
+  ['Agriculture', '🚜 Agriculture machines'],
+] as const
 
 const PREVIEW = 5 // low stock lines and containers shown on the page; the rest open in a window
