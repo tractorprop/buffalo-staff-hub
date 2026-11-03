@@ -38,9 +38,12 @@ function Stat({ label, value, onClick, tone, detail }: { label: string; value: n
   return (
     <button
       onClick={onClick}
-      className="rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+      className="group rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-brand-500 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900"
     >
-      <div className={`text-2xl font-bold ${tone}`}>{value}</div>
+      <div className="flex items-baseline">
+        <span className={`text-2xl font-bold ${tone}`}>{value}</span>
+        <span className="ml-auto text-xs font-medium text-sky-700 group-hover:underline dark:text-sky-300">View →</span>
+      </div>
       <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
       {detail && <div className="mt-1 text-[11px] text-slate-400">{detail}</div>}
     </button>

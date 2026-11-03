@@ -435,6 +435,8 @@ export function MachinesPage() {
             const p = new URLSearchParams(params)
             p.set('status', st)
             setParams(p, { replace: true })
+            // Show the filtered list straight away.
+            setTimeout(() => document.getElementById('machine-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
           }}
           onModel={openModel}
           onContainer={(ref) => setShowContainers(ref)}
@@ -530,7 +532,7 @@ export function MachinesPage() {
         </div>
       )}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
+      <div id="machine-list" className="flex scroll-mt-20 gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
         {tabs.map((t) => (
           <button
             key={t.key}
