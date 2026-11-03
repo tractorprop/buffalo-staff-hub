@@ -4,7 +4,7 @@ import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import { personName, useProfiles } from '../../lib/useProfiles'
 import type { AuditEntry, Invoice, Model, ShopifyLink, ShopifyOrder } from '../../lib/types'
-import { Button, Confirm, ErrorText, Loading, fmtDate, fmtDateTime, inputClass } from '../../components/ui'
+import { Button, Confirm, ErrorText, Loading, Modal, fmtDate, fmtDateTime, inputClass } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
 import { invoiceDescription, modelLabel as nameOf } from '../../lib/modelLabel'
 import { invoiceNumber } from '../../lib/money'
@@ -45,7 +45,15 @@ function linesFromOrder(order: ShopifyOrder, links: Map<string, ShopifyLink>) {
     else if (!link.model_id) skipped.push(item.title)
     else {
       const k = `${link.model_id}|${link.size ?? ''}`
-      const line = found.get(k) ?? { key: nextKey++, modelId: link.model_id, size: link.size ?? '', direction: 'out' as const, qty: 0, fromInvoice: 0, itemKeys: [] }
+      const line = found.get(k) ?? {
+        key: nextKey++,
+        modelId: link.model_id,
+        size: link.size ?? '',
+        direction: 'out' as const,
+        qty: 0,
+        fromInvoice: 0,
+        itemKeys: [],
+      }
       line.qty += item.qty
       line.fromInvoice! += item.qty
       line.itemKeys!.push(item.key)
@@ -158,6 +166,7 @@ export function StockEntryPage() {
   const [days, setDays] = useState(30)
   const [person, setPerson] = useState('')
   const [modelSearch, setModelSearch] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
   const { data, error, loading, reload } = useLive<Data>(['models', 'machines', 'shopify_orders', 'shopify_links'], () => loadAll(days), [days])
   const [lines, setLines] = useState<Line[]>([newLine()])
   const [reference, setReference] = useState('')
@@ -255,7 +264,14 @@ export function StockEntryPage() {
     const built = linesFromOrder(order, links)
     if (!built.lines.length && !built.unlinked.length) return setFormError(`Order ${order.name} has no stock items on it to send out.`)
     const sent = await supabase!.from('machines').select('id', { count: 'exact', head: true }).eq('stock_reference', ref)
-    setInvoice({ ref, title: `Shopify order ${order.name}`, skipped: built.skipped, alreadySent: sent.error ? 0 : (sent.count ?? 0), order, unlinked: built.unlinked })
+    setInvoice({
+      ref,
+      title: `Shopify order ${order.name}`,
+      skipped: built.skipped,
+      alreadySent: sent.error ? 0 : (sent.count ?? 0),
+      order,
+      unlinked: built.unlinked,
+    })
     setReference(ref)
     setLines(built.lines)
   }
@@ -358,6 +374,66 @@ export function StockEntryPage() {
     })
   }, [data, person, modelSearch])
 
+  const allHistory = useMemo(() => movements(data?.log ?? []), [data])
+  const historyTable = (rows: typeof history) => (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-sm dark:border-slate-800 dark:bg-slate-900">
+      <table className="w-full">
+        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+          <tr>
+            <th className="px-3 py-2">When</th>
+            <th className="px-3 py-2">Who</th>
+            <th className="px-3 py-2">Reference</th>
+            <th className="px-3 py-2">Entry</th>
+            {isFounder && <th className="px-3 py-2"></th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.map((g) => (
+            <tr key={`${g.at}${g.modelId}${g.size}${g.qty}${g.reference}`}>
+              <td className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{fmtDateTime(g.at)}</td>
+              <td className="px-3 py-2">{personName(profiles, g.by)}</td>
+              <td className="px-3 py-2">
+                {g.reference ? (
+                  <button
+                    className="font-mono text-xs font-semibold hover:underline"
+                    title="Show only this reference"
+                    onClick={() => (setModelSearch(g.reference!), setHistoryOpen(true))}
+                  >
+                    {g.reference}
+                  </button>
+                ) : (
+                  <span className="text-slate-400">–</span>
+                )}
+              </td>
+              <td className="px-3 py-2">
+                <span className={`mr-2 font-bold ${g.qty < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                  {g.qty < 0 ? `−${-g.qty}` : `+${g.qty}`}
+                </span>
+                <span className="font-medium">{modelLabel(g.modelId, g.size)}</span>
+                <span className="ml-1 text-xs text-slate-500">{g.qty < 0 ? 'left (sold)' : 'returned'}</span>
+              </td>
+              {isFounder && (
+                <td className="px-3 py-2 text-right">
+                  <button
+                    className="text-xs text-red-600 hover:underline dark:text-red-400"
+                    onClick={() =>
+                      setRemoveEntry({
+                        ids: g.ids,
+                        label: `${g.qty < 0 ? '−' : '+'}${Math.abs(g.qty)} ${modelLabel(g.modelId, g.size)}${g.reference ? ` (ref ${g.reference})` : ''}`,
+                      })
+                    }
+                  >
+                    Delete
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -376,7 +452,8 @@ export function StockEntryPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <span>
-                    {invoice.order ? '🛒' : '🧾'} Sending out <strong>{invoice.title}</strong>. The items below come from the {invoice.order ? 'order' : 'invoice'}.
+                    {invoice.order ? '🛒' : '🧾'} Sending out <strong>{invoice.title}</strong>. The items below come from the{' '}
+                    {invoice.order ? 'order' : 'invoice'}.
                   </span>
                   <Button size="sm" className="ml-auto" onClick={clearInvoice}>
                     Clear
@@ -394,7 +471,7 @@ export function StockEntryPage() {
                       ⚠️ {invoice.unlinked.length} Shopify listing{invoice.unlinked.length === 1 ? ' is' : 's are'} not linked to a hub item yet.
                       {isFounder
                         ? ' Choose the matching item once, and future orders will be recognised automatically.'
-                        : ' Ask the founder to link it, or remove it if it isn\'t being sent now.'}
+                        : " Ask the founder to link it, or remove it if it isn't being sent now."}
                     </p>
                     {invoice.unlinked.map((item) =>
                       isFounder ? (
@@ -454,13 +531,21 @@ export function StockEntryPage() {
                                 <span className="font-bold">{o.name}</span>
                                 <span className="ml-2 text-xs text-slate-500">{fmtDate(o.ordered_at)}</span>
                                 {waiting && <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">⚠️ needs linking</span>}
-                                <div className="truncate text-xs text-slate-500 dark:text-slate-400">{o.items.map((i) => `${i.qty}× ${i.title}`).join(', ')}</div>
+                                <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                  {o.items.map((i) => `${i.qty}× ${i.title}`).join(', ')}
+                                </div>
                               </div>
                               <Button size="sm" variant="primary" onClick={() => loadOrder(o)}>
                                 Load
                               </Button>
                               {isManager && (
-                                <Button size="sm" variant="danger" className="font-bold" title="Remove from list (e.g. cancelled)" onClick={() => setRemoveOrder(o)}>
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  className="font-bold"
+                                  title="Remove from list (e.g. cancelled)"
+                                  onClick={() => setRemoveOrder(o)}
+                                >
                                   ✕
                                 </Button>
                               )}
@@ -559,7 +644,14 @@ export function StockEntryPage() {
                       ✕ Remove
                     </Button>
                   ) : (
-                    <Button size="sm" variant="danger" className="font-bold" aria-label="Remove line" disabled={lines.length === 1 && !invoice} onClick={() => removeLine(l)}>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      className="font-bold"
+                      aria-label="Remove line"
+                      disabled={lines.length === 1 && !invoice}
+                      onClick={() => removeLine(l)}
+                    >
                       ✕ Remove
                     </Button>
                   )}
@@ -589,91 +681,51 @@ export function StockEntryPage() {
       {data && (
         <section className="space-y-2">
           <h2 className="font-semibold">Stock entry history</h2>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select className={`${inputClass} sm:w-56`} value={person} onChange={(e) => setPerson(e.target.value)}>
-              <option value="">Everyone</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name || p.email}
-                </option>
-              ))}
-            </select>
-            <input
-              className={inputClass}
-              placeholder="Filter by model or reference number…"
-              value={modelSearch}
-              onChange={(e) => setModelSearch(e.target.value)}
-            />
-          </div>
-          {history.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              No stock entries in the last {days} days
-              {person || modelSearch ? ' matching these filters' : ''}.
-            </p>
+          {allHistory.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No stock entries in the last {days} days.</p>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-sm dark:border-slate-800 dark:bg-slate-900">
-              <table className="w-full">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">When</th>
-                    <th className="px-3 py-2">Who</th>
-                    <th className="px-3 py-2">Reference</th>
-                    <th className="px-3 py-2">Entry</th>
-                    {isFounder && <th className="px-3 py-2"></th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {history.map((g) => (
-                    <tr key={`${g.at}${g.modelId}${g.size}${g.qty}${g.reference}`}>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{fmtDateTime(g.at)}</td>
-                      <td className="px-3 py-2">{personName(profiles, g.by)}</td>
-                      <td className="px-3 py-2">
-                        {g.reference ? (
-                          <button
-                            className="font-mono text-xs font-semibold hover:underline"
-                            title="Show only this reference"
-                            onClick={() => setModelSearch(g.reference!)}
-                          >
-                            {g.reference}
-                          </button>
-                        ) : (
-                          <span className="text-slate-400">–</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className={`mr-2 font-bold ${g.qty < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
-                          {g.qty < 0 ? `−${-g.qty}` : `+${g.qty}`}
-                        </span>
-                        <span className="font-medium">{modelLabel(g.modelId, g.size)}</span>
-                        <span className="ml-1 text-xs text-slate-500">{g.qty < 0 ? 'left (sold)' : 'returned'}</span>
-                      </td>
-                      {isFounder && (
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            className="text-xs text-red-600 hover:underline dark:text-red-400"
-                            onClick={() =>
-                              setRemoveEntry({
-                                ids: g.ids,
-                                label: `${g.qty < 0 ? '−' : '+'}${Math.abs(g.qty)} ${modelLabel(g.modelId, g.size)}${g.reference ? ` (ref ${g.reference})` : ''}`,
-                              })
-                            }
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            historyTable(allHistory.slice(0, 5))
           )}
-          <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-            Showing the last {days} days.
-            <Button size="sm" onClick={() => setDays((n) => n + 90)}>
-              Load older
-            </Button>
-          </div>
+          <Button size="sm" onClick={() => setHistoryOpen(true)}>
+            Open all history{allHistory.length ? ` (${allHistory.length})` : ''} →
+          </Button>
+          {historyOpen && (
+            <Modal title="Stock entry history" onClose={() => setHistoryOpen(false)} wide="xl">
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select className={`${inputClass} sm:w-56`} value={person} onChange={(e) => setPerson(e.target.value)}>
+                    <option value="">Everyone</option>
+                    {profiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name || p.email}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className={inputClass}
+                    autoFocus
+                    placeholder="Filter by model or reference number…"
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                  />
+                </div>
+                {history.length === 0 ? (
+                  <p className="py-4 text-sm text-slate-500 dark:text-slate-400">
+                    No stock entries in the last {days} days
+                    {person || modelSearch ? ' matching these filters' : ''}.
+                  </p>
+                ) : (
+                  historyTable(history)
+                )}
+                <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                  Showing the last {days} days.
+                  <Button size="sm" onClick={() => setDays((n) => n + 90)}>
+                    Load older
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
         </section>
       )}
       {removeOrder && (
