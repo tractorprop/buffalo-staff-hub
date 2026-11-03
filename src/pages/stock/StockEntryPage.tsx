@@ -29,6 +29,7 @@ interface LoadedInvoice {
   alreadySent: number // items already taken out of stock under this reference
   order?: ShopifyOrder
   unlinked?: ShopifyOrder['items'] // Shopify listings not yet linked to a hub item
+  removed?: string[] // Shopify listings staff took off this entry (not being sent now)
 }
 
 const shopifyRef = (o: ShopifyOrder) => `Shopify ${o.name}`
@@ -262,11 +263,21 @@ export function StockEntryPage() {
   // When the founder links a listing, rebuild the loaded order's lines.
   useEffect(() => {
     if (!invoice?.order) return
-    const built = linesFromOrder(invoice.order, links)
+    const removed = new Set(invoice.removed ?? [])
+    const built = linesFromOrder({ ...invoice.order, items: invoice.order.items.filter((i) => !removed.has(i.key)) }, links)
     setInvoice((i) => (i ? { ...i, unlinked: built.unlinked, skipped: built.skipped } : i))
     setLines(built.lines)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [links])
+
+  // Take a line (or an unlinked Shopify listing) off this entry, e.g. it isn't going out today.
+  function removeLine(l: Line) {
+    setLines((ls) => ls.filter((x) => x.key !== l.key))
+    if (l.itemKeys?.length) setInvoice((i) => (i ? { ...i, removed: [...(i.removed ?? []), ...l.itemKeys!] } : i))
+  }
+  function removeUnlinked(key: string) {
+    setInvoice((i) => (i ? { ...i, unlinked: i.unlinked?.filter((u) => u.key !== key), removed: [...(i.removed ?? []), key] } : i))
+  }
 
   async function saveLink(item: ShopifyOrder['items'][number], modelId: string | null, size: string | null) {
     const { error } = await supabase!.from('shopify_links').upsert({ item_key: item.key, model_id: modelId, size, title: item.title })
@@ -296,7 +307,7 @@ export function StockEntryPage() {
     const ref = reference.trim()
     if (!ref) return setFormError('Enter a reference number.')
     if (invoice?.unlinked?.length) return setFormError('Some items on this order are not linked to the hub yet. The founder needs to link them first.')
-    if (!filled.length) return setFormError('Choose a model.')
+    if (!filled.length) return setFormError(invoice ? `Nothing left to send on ${invoice.title}. Add an item, or click Clear.` : 'Choose a model.')
     for (const l of filled) {
       const m = data.models.find((x) => x.id === l.modelId)!
       if (m.sizes.length && !l.size) return setFormError(`Choose a size for ${m.model_number}.`)
@@ -381,9 +392,24 @@ export function StockEntryPage() {
                   <div className="space-y-2 rounded-lg border border-red-300 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
                     <p className="font-medium text-red-700 dark:text-red-300">
                       ⚠️ {invoice.unlinked.length} Shopify listing{invoice.unlinked.length === 1 ? ' is' : 's are'} not linked to a hub item yet.
-                      {isFounder ? ' Choose the matching item once, and future orders will be recognised automatically.' : ' Ask the founder to link it before sending.'}
+                      {isFounder
+                        ? ' Choose the matching item once, and future orders will be recognised automatically.'
+                        : ' Ask the founder to link it, or remove it if it isn\'t being sent now.'}
                     </p>
-                    {isFounder && invoice.unlinked.map((item) => <LinkItem key={item.key} item={item} models={data?.models ?? []} onSave={saveLink} />)}
+                    {invoice.unlinked.map((item) =>
+                      isFounder ? (
+                        <LinkItem key={item.key} item={item} models={data?.models ?? []} onSave={saveLink} onRemove={() => removeUnlinked(item.key)} />
+                      ) : (
+                        <div key={item.key} className="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800">
+                          <span className="flex-1">
+                            <strong>{item.title}</strong> <span className="text-slate-500">× {item.qty}</span>
+                          </span>
+                          <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => removeUnlinked(item.key)}>
+                            Remove
+                          </Button>
+                        </div>
+                      ),
+                    )}
                   </div>
                 )}
                 {invoice.skipped.length > 0 && (
@@ -528,14 +554,15 @@ export function StockEntryPage() {
                     value={l.qty}
                     onChange={(e) => update(l.key, { qty: parseInt(e.target.value) || 0 })}
                   />
-                  <Button
-                    variant="ghost"
-                    aria-label="Remove line"
-                    disabled={lines.length === 1}
-                    onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
-                  >
-                    ×
-                  </Button>
+                  {l.fromInvoice ? (
+                    <Button variant="ghost" className="text-red-600 dark:text-red-400" title="Not sending this item now" onClick={() => removeLine(l)}>
+                      Remove
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" aria-label="Remove line" disabled={lines.length === 1 && !invoice} onClick={() => removeLine(l)}>
+                      ×
+                    </Button>
+                  )}
                 </div>
                 {have !== null && (
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -685,10 +712,12 @@ function LinkItem({
   item,
   models,
   onSave,
+  onRemove,
 }: {
   item: ShopifyOrder['items'][number]
   models: Model[]
   onSave: (item: ShopifyOrder['items'][number], modelId: string | null, size: string | null) => void
+  onRemove: () => void
 }) {
   const [modelId, setModelId] = useState('')
   const [size, setSize] = useState('')
@@ -715,6 +744,9 @@ function LinkItem({
         </Button>
         <Button size="sm" onClick={() => onSave(item, null, null)}>
           Not a stock item
+        </Button>
+        <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" title="Not sending it now (the link isn't saved)" onClick={onRemove}>
+          Remove
         </Button>
       </div>
     </div>
