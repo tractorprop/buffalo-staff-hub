@@ -56,9 +56,3 @@ export function defaultLowStock(m: LowStockInfo): number | null {
 
 // The low stock level that applies: the model's own, otherwise the default for its type.
 export const lowStockLevel = (m: LowStockInfo) => m.reorder_level ?? defaultLowStock(m)
-
-// Words that usually mean an attachment, not a machine (to spot attachments saved as machines).
-export const looksLikeAttachment = (m: Pick<Model, 'model_number' | 'name'>) =>
-  /bucket|thumb|ripper|auger|fork|grapple|hitch|breaker|rake|blade|grab|canopy|hammer|tilt|sweeper|trencher|leveller|leveler|pallet|attachment/i.test(
-    `${m.model_number} ${m.name ?? ''}`,
-  )
