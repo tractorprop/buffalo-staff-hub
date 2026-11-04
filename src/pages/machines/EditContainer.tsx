@@ -32,8 +32,9 @@ export function EditContainer({
   models: Model[]
   hasPendingCheckin: boolean
   onClose: () => void
-  onSaved: (message: string) => void
+  onSaved: (message: string, newRef: string) => void
 }) {
+  const [name, setName] = useState(containerRef)
   const [lines, setLines] = useState<Line[] | null>(null)
   const [location, setLocation] = useState<string | null>(null)
   const [eta, setEta] = useState(initialEta ?? '')
@@ -73,6 +74,13 @@ export function EditContainer({
     }
     if (lines.some((l) => l.modelId && !(l.qty >= 0 && l.qty <= 500))) return setError('Check the quantities.')
     if (total === 0) return setError('That would leave the container empty. To remove it completely, use Delete container instead.')
+    const newRef = name.trim()
+    if (!newRef) return setError('Enter a name for the container.')
+    const renamed = newRef !== containerRef
+    if (renamed) {
+      const { count } = await supabase!.from('machines').select('id', { count: 'exact', head: true }).eq('container_ref', newRef).eq('status', 'en_route')
+      if (count) return setError(`There's already a container called "${newRef}" on the way. Choose a different name.`)
+    }
 
     const remove: string[] = []
     const add: Record<string, unknown>[] = []
@@ -80,17 +88,18 @@ export function EditContainer({
       if (!l.modelId) continue
       if (l.qty < l.ids.length) remove.push(...l.ids.slice(0, l.ids.length - l.qty))
       for (let i = l.ids.length; i < l.qty; i++)
-        add.push({ model_id: l.modelId, size: l.size || null, status: 'en_route', container_ref: containerRef, eta: eta || null, location })
+        add.push({ model_id: l.modelId, size: l.size || null, status: 'en_route', container_ref: newRef, eta: eta || null, location })
     }
 
     setBusy(true)
     setError('')
+    // Rename first (the items, a check-in waiting for approval and the factory invoice all follow), then the rest.
     const steps = [
+      renamed ? supabase!.from('machines').update({ container_ref: newRef }).eq('container_ref', containerRef).eq('status', 'en_route') : null,
+      renamed ? supabase!.from('container_checkins').update({ container_ref: newRef }).eq('container_ref', containerRef).eq('status', 'pending') : null,
       remove.length ? supabase!.from('machines').delete().in('id', remove) : null,
       add.length ? supabase!.from('machines').insert(add) : null,
-      (eta || null) !== initialEta
-        ? supabase!.from('machines').update({ eta: eta || null }).eq('container_ref', containerRef).eq('status', 'en_route')
-        : null,
+      (eta || null) !== initialEta ? supabase!.from('machines').update({ eta: eta || null }).eq('container_ref', newRef).eq('status', 'en_route') : null,
     ]
     for (const step of steps) {
       if (!step) continue
@@ -100,9 +109,16 @@ export function EditContainer({
         return setError(friendlyError(error))
       }
     }
+    // The factory invoice (founder only; ignored if invoices aren't switched on).
+    if (renamed) await supabase!.from('stock_documents').update({ container_ref: newRef }).eq('container_ref', containerRef)
     setBusy(false)
-    const changes = [remove.length && `${remove.length} removed`, add.length && `${add.length} added`, (eta || null) !== initialEta && 'ETA changed'].filter(Boolean)
-    onSaved(changes.length ? `Container ${containerRef} updated: ${changes.join(', ')}.` : 'No changes made.')
+    const changes = [
+      renamed && `renamed from ${containerRef}`,
+      remove.length && `${remove.length} removed`,
+      add.length && `${add.length} added`,
+      (eta || null) !== initialEta && 'ETA changed',
+    ].filter(Boolean)
+    onSaved(changes.length ? `Container ${newRef} updated: ${changes.join(', ')}.` : 'No changes made.', newRef)
   }
 
   return (
@@ -116,9 +132,14 @@ export function EditContainer({
               ⏳ Staff have already checked this container in and it's waiting for approval. Changing it now may not match what they counted.
             </p>
           )}
-          <Field label="Expected arrival (ETA)">
-            <input type="date" className={`${inputClass} sm:w-56`} value={eta} onChange={(e) => setEta(e.target.value)} />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Container name *">
+              <input className={inputClass} required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <Field label="Expected arrival (ETA)">
+              <input type="date" className={inputClass} value={eta} onChange={(e) => setEta(e.target.value)} />
+            </Field>
+          </div>
 
           <div>
             <div className="mb-2 text-sm font-medium">What's in the container</div>

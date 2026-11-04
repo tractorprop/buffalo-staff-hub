@@ -228,7 +228,7 @@ export function ContainersWindow({
               {isFounder && (
                 <div className="flex justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
                   <Button size="sm" onClick={() => setEditing(true)}>
-                    ✏️ Edit contents / ETA
+                    ✏️ Edit name, contents or ETA
                   </Button>
                   <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setConfirmDelete(true)}>
                     🗑️ Delete container
@@ -242,8 +242,9 @@ export function ContainersWindow({
                   models={models}
                   hasPendingCheckin={!!pending}
                   onClose={() => setEditing(false)}
-                  onSaved={(msg) => {
+                  onSaved={(msg, newRef) => {
                     setEditing(false)
+                    setSelected(newRef)
                     onMessage(msg)
                   }}
                 />
