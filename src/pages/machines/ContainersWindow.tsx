@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { personName, useProfiles } from '../../lib/useProfiles'
 import { supabase, friendlyError } from '../../lib/supabase'
 import type { Container } from '../../lib/calendarData'
 import { addDays } from '../../lib/dates'
@@ -45,6 +46,46 @@ export function ContainersWindow({
   const c = containers.find((x) => x.ref === selected)
   const pending = c ? pendingFor(c.ref) : undefined
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const profiles = useProfiles()
+  // A container that was already checked in but still has items marked "on the way".
+  const [lastCheckin, setLastCheckin] = useState<ContainerCheckin | null>(null)
+  const [leftover, setLeftover] = useState<'stock' | 'remove' | null>(null)
+  useEffect(() => {
+    setLastCheckin(null)
+    if (!c) return
+    supabase!
+      .from('container_checkins')
+      .select('*')
+      .eq('container_ref', c.ref)
+      .eq('status', 'approved')
+      .order('decided_at', { ascending: false })
+      .limit(1)
+      .then(async ({ data }) => {
+        const ci = data?.[0] as ContainerCheckin | undefined
+        if (!ci) return
+        // Only if the leftover items were already on the way before that check-in (not a new container with the same name).
+        const { count } = await supabase!
+          .from('machines')
+          .select('id', { count: 'exact', head: true })
+          .eq('container_ref', c.ref)
+          .eq('status', 'en_route')
+          .lte('created_at', ci.decided_at ?? ci.submitted_at)
+        if (count) setLastCheckin(ci)
+      })
+  }, [c?.ref, c?.total]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function finishLeftovers(action: 'stock' | 'remove') {
+    if (!c) return
+    const q =
+      action === 'stock'
+        ? supabase!.from('machines').update({ status: 'in_stock', location: lastCheckin?.location ?? null }).eq('container_ref', c.ref).eq('status', 'en_route')
+        : supabase!.from('machines').delete().eq('container_ref', c.ref).eq('status', 'en_route')
+    const { error } = await q
+    setLeftover(null)
+    if (error) return setError(friendlyError(error))
+    setSelected(containers.find((x) => x.ref !== c.ref)?.ref ?? null)
+    onMessage(action === 'stock' ? `The rest of container ${c.ref} moved into stock.` : `The rest of container ${c.ref} removed as missing.`)
+  }
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState('')
 
@@ -119,6 +160,44 @@ export function ContainersWindow({
                   )}
                 </div>
               </div>
+
+              {lastCheckin && !pending && (
+                <div className="space-y-2 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-sm dark:bg-amber-950/30">
+                  <p>
+                    ✅ This container was already checked in on <strong>{fmtDate(lastCheckin.decided_at ?? lastCheckin.submitted_at)}</strong> by{' '}
+                    {personName(profiles, lastCheckin.submitted_by)}, but the <strong>{c.total}</strong> item{c.total === 1 ? ' below is' : 's below are'} still
+                    marked as on the way (they weren't on that check-in).
+                  </p>
+                  {isManager ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="primary" onClick={() => setLeftover('stock')}>
+                        ✅ They arrived: move into stock
+                      </Button>
+                      {isFounder && (
+                        <Button size="sm" variant="danger" onClick={() => setLeftover('remove')}>
+                          ✕ They didn't arrive: remove
+                        </Button>
+                      )}
+                      <span className="self-center text-xs text-slate-500">Or use Check in container to count them.</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-600 dark:text-slate-300">A manager can move them into stock, or use Check in container to count them.</p>
+                  )}
+                </div>
+              )}
+              {leftover && (
+                <Confirm
+                  title={leftover === 'stock' ? `Move the rest of ${c.ref} into stock?` : `Remove the rest of ${c.ref}?`}
+                  message={
+                    leftover === 'stock'
+                      ? `The ${c.total} item${c.total === 1 ? '' : 's'} still on the way in this container will be marked as in stock, and the container leaves the list.`
+                      : `The ${c.total} item${c.total === 1 ? '' : 's'} still on the way in this container will be deleted as missing, and the container leaves the list.`
+                  }
+                  confirmLabel={leftover === 'stock' ? 'Move into stock' : 'Remove'}
+                  onConfirm={() => finishLeftovers(leftover)}
+                  onCancel={() => setLeftover(null)}
+                />
+              )}
 
               <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
                 <table className="w-full text-sm">
