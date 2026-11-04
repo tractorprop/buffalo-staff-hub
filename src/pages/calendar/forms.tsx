@@ -156,7 +156,7 @@ export function HolidayForm({
         <Field label={isManager ? 'Label' : 'Note'} hint={isManager ? 'Shown on the calendar, e.g. Christmas Day, Easter Monday bank holiday' : undefined}>
           <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {!isManager && <p className="text-xs text-slate-500">A manager will approve or decline your request.</p>}
+        {!isManager && <p className="text-xs text-slate-500">Daniel will approve or decline your request.</p>}
         <ErrorText>{error}</ErrorText>
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>

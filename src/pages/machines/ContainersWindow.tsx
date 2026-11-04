@@ -150,7 +150,7 @@ export function ContainersWindow({
                       </Button>
                     ) : (
                       <span className="inline-block rounded-xl bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                        ⏳ Submitted. Waiting for a manager to approve
+                        ⏳ Submitted. Waiting for Daniel to approve
                       </span>
                     )
                   ) : (
@@ -261,7 +261,7 @@ export function ContainersWindow({
               {!pending && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   When it lands, click <strong>Check in container</strong> and count what actually arrived.{' '}
-                  {isManager ? 'Your check-in goes straight into stock.' : 'A manager then approves it before it goes into stock.'}
+                  {isManager ? 'Your check-in goes straight into stock.' : 'Daniel then approves it before it goes into stock.'}
                 </p>
               )}
             </section>

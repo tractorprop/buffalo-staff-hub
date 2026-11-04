@@ -17,7 +17,7 @@ const links = [
 
 export function Layout() {
   const { profile, isManager, isFounder, signOut } = useAuth()
-  const roleLabel = isFounder ? 'Founder' : isManager ? 'Manager' : 'Staff'
+  const roleLabel = isFounder ? 'Founder' : isManager ? 'CEO' : 'Staff'
   const [menuOpen, setMenuOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(currentTheme())
 
