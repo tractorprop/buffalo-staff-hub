@@ -9,6 +9,8 @@ import { Button, Confirm, ErrorText, Loading, Modal, fmtDate, fmtDateTime, input
 import { ModelPicker } from '../../components/ModelPicker'
 import { invoiceDescription, modelLabel as nameOf } from '../../lib/modelLabel'
 import { invoiceNumber } from '../../lib/money'
+import { downloadCsv, monthsAgo, sheetDateTime } from '../../lib/download'
+import { DownloadButton } from '../../components/DownloadButton'
 
 type Direction = 'out' | 'in'
 
@@ -376,6 +378,32 @@ export function StockEntryPage() {
   }, [data, person, modelSearch])
 
   const allHistory = useMemo(() => movements(data?.log ?? []), [data])
+
+  // Download for Excel: load enough days first, then save.
+  const [pendingMonths, setPendingMonths] = useState<number | null>(null)
+  function exportCsv(months: number) {
+    const since = monthsAgo(months)
+    downloadCsv(
+      `stock-entry-history-last-${months}-months`,
+      ['Date', 'Person', 'Reference', 'Change', 'Item', 'Type'],
+      allHistory
+        .filter((g) => g.at >= since)
+        .map((g) => [sheetDateTime(g.at), personName(profiles, g.by), g.reference ?? '', g.qty, modelLabel(g.modelId, g.size), g.qty < 0 ? 'Left (sold)' : 'Returned']),
+    )
+  }
+  function requestDownload(months: number) {
+    const needed = Math.ceil(months * 30.5) + 1
+    if (days >= needed) return exportCsv(months)
+    setPendingMonths(months)
+    setDays((d) => Math.max(d, needed))
+  }
+  useEffect(() => {
+    if (pendingMonths != null && !loading && days >= Math.ceil(pendingMonths * 30.5) + 1) {
+      exportCsv(pendingMonths)
+      setPendingMonths(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMonths, loading, days, allHistory])
   const historyTable = (rows: typeof history) => (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-sm dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full">
@@ -687,9 +715,12 @@ export function StockEntryPage() {
           ) : (
             historyTable(allHistory.slice(0, 5))
           )}
-          <Button size="sm" onClick={() => setHistoryOpen(true)}>
-            Open all history{allHistory.length ? ` (${allHistory.length})` : ''} →
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={() => setHistoryOpen(true)}>
+              Open all history{allHistory.length ? ` (${allHistory.length})` : ''} →
+            </Button>
+            <DownloadButton onDownload={requestDownload} busy={pendingMonths != null} />
+          </div>
           {historyOpen && (
             <Modal title="Stock entry history" onClose={() => setHistoryOpen(false)} wide="xl">
               <div className="space-y-2">

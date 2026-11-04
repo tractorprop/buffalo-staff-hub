@@ -7,6 +7,9 @@ import type { Invoice } from '../../lib/types'
 import { Button, Confirm, Empty, ErrorText, Modal, Toast, fmtDate, inputClass } from '../../components/ui'
 import { CustomerFields, emptyCustomer } from './CustomerFields'
 import { invoiceHtml, openInvoiceWindow, showInvoice } from './invoiceDocument'
+import { DownloadButton } from '../../components/DownloadButton'
+import { downloadCsv, monthsAgo } from '../../lib/download'
+import { selectAll } from '../../lib/selectAll'
 import type { SalesData } from './SalesPage'
 
 export function InvoiceHistory({ data }: { data: SalesData }) {
@@ -37,6 +40,28 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
     setReprint(null)
   }
 
+  async function download(months: number) {
+    const since = monthsAgo(months).slice(0, 10)
+    const { data: rows, error } = await selectAll<Invoice>(() =>
+      supabase!.from('invoices').select('*').gte('invoice_date', since).order('invoice_date').order('number'),
+    )
+    if (error || !rows) return setToast(friendlyError(error))
+    downloadCsv(
+      `invoices-last-${months}-months`,
+      ['Invoice', 'Date', 'Customer', 'Items', 'Subtotal (£)', 'VAT (£)', 'Total (£)', 'Created by'],
+      rows.map((i) => [
+        invoiceNumber(i.number),
+        i.invoice_date,
+        i.customer_name ?? '',
+        i.lines.map((l) => `${l.qty}× ${l.description}`).join('; '),
+        i.subtotal,
+        i.vat,
+        i.total,
+        personName(profiles, i.created_by),
+      ]),
+    )
+  }
+
   async function remove(inv: Invoice) {
     const { error } = await supabase!.from('invoices').delete().eq('id', inv.id)
     if (error) setToast(friendlyError(error))
@@ -45,7 +70,10 @@ export function InvoiceHistory({ data }: { data: SalesData }) {
 
   return (
     <div className="space-y-3">
-      <input className={inputClass} placeholder="Search invoice number (e.g. 1001), customer name or item…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input className={inputClass} placeholder="Search invoice number (e.g. 1001), customer name or item…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <DownloadButton onDownload={download} />
+      </div>
       {list.length === 0 ? (
         <Empty title={search ? 'No invoices match' : 'No invoices yet'}>{!search && 'Create one on the New invoice tab.'}</Empty>
       ) : (

@@ -8,7 +8,7 @@ import { HistorySection, useAuditLog, type HistoryEvent } from '../../components
 export function WaitlistHistory({ models }: { models: Model[] }) {
   const profiles = useProfiles()
   const [days, setDays] = useState(180)
-  const { data, error, reload } = useAuditLog('waitlist', days)
+  const { data, error, reload, loading } = useAuditLog('waitlist', days)
 
   const events = useMemo(
     () =>
@@ -55,6 +55,9 @@ export function WaitlistHistory({ models }: { models: Model[] }) {
         ['edited', '✏️ Changes'],
       ]}
       days={days}
+      fileName="waiting-list-history"
+      loading={loading}
+      onDays={(n) => setDays((d) => Math.max(d, n))}
       onLoadOlder={() => setDays((d) => d + 365)}
       error={error}
       onDeleted={reload}

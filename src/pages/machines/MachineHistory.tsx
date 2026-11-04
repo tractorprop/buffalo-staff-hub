@@ -137,7 +137,7 @@ function toEvent(g: Group): HistoryEvent {
 // Everything that has happened to stock: containers, arrivals, sales, returns, removals and edits.
 export function MachineHistory({ models }: { models: Model[] }) {
   const [days, setDays] = useState(90)
-  const { data, error, reload } = useAuditLog('machines', days)
+  const { data, error, reload, loading } = useAuditLog('machines', days)
   const events = useMemo(() => {
     const label = (r: Row) => labelFor(r.model_id ?? '', models, r.size)
     return group(data ?? [], label).map(toEvent)
@@ -150,6 +150,9 @@ export function MachineHistory({ models }: { models: Model[] }) {
       events={events}
       kinds={kinds}
       days={days}
+      fileName="machines-history"
+      loading={loading}
+      onDays={(n) => setDays((d) => Math.max(d, n))}
       onLoadOlder={() => setDays((d) => d + 365)}
       error={error}
       onDeleted={reload}

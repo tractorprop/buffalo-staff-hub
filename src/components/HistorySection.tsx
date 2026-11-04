@@ -1,4 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { downloadCsv, monthsAgo, sheetDateTime } from '../lib/download'
+import { DownloadButton } from './DownloadButton'
 import { supabase, friendlyError } from '../lib/supabase'
 import { selectAll } from '../lib/selectAll'
 import { useAuth } from '../auth/AuthProvider'
@@ -48,6 +50,9 @@ export function HistorySection({
   onLoadOlder,
   error,
   onDeleted,
+  fileName,
+  loading = false,
+  onDays,
 }: {
   title: string
   description: string
@@ -57,6 +62,9 @@ export function HistorySection({
   onLoadOlder: () => void
   error?: string
   onDeleted?: () => void
+  fileName: string // for "Download for Excel", e.g. "machines-history"
+  loading?: boolean
+  onDays: (days: number) => void // load at least this many days (for downloads)
 }) {
   const profiles = useProfiles()
   const { isFounder } = useAuth()
@@ -68,7 +76,33 @@ export function HistorySection({
   const [deleteError, setDeleteError] = useState('')
   const [limit, setLimit] = useState(50)
 
+  // Download: make sure enough days are loaded, then save the spreadsheet.
+  const [pendingMonths, setPendingMonths] = useState<number | null>(null)
+  function exportCsv(months: number) {
+    const since = monthsAgo(months)
+    const label = new Map(kinds ?? [])
+    downloadCsv(
+      `${fileName}-last-${months}-months`,
+      ['Date', 'Person', 'Type', 'Details'],
+      sorted.filter((e) => e.at >= since).map((e) => [sheetDateTime(e.at), personName(profiles, e.by), e.kind ? (label.get(e.kind) ?? e.kind).replace(/^\S+ /, '') : '', e.search.replace(/\s+/g, ' ').trim()]),
+    )
+  }
+  function requestDownload(months: number) {
+    const needed = Math.ceil(months * 30.5) + 1
+    if (days >= needed) return exportCsv(months)
+    setPendingMonths(months)
+    onDays(needed)
+  }
+
   const sorted = useMemo(() => [...events].sort((a, b) => b.at.localeCompare(a.at)), [events])
+  useEffect(() => {
+    if (pendingMonths != null && !loading && days >= Math.ceil(pendingMonths * 30.5) + 1) {
+      exportCsv(pendingMonths)
+      setPendingMonths(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMonths, loading, days, sorted])
+
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
     return sorted
@@ -110,9 +144,12 @@ export function HistorySection({
       ) : (
         list(sorted.slice(0, PREVIEW))
       )}
-      <Button size="sm" onClick={() => setOpen(true)}>
-        Open all history{sorted.length ? ` (${sorted.length})` : ''} →
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => setOpen(true)}>
+          Open all history{sorted.length ? ` (${sorted.length})` : ''} →
+        </Button>
+        <DownloadButton onDownload={requestDownload} busy={pendingMonths != null} />
+      </div>
 
       {open && (
         <Modal title={title} onClose={() => setOpen(false)} wide="xl">

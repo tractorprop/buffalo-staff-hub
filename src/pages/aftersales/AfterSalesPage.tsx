@@ -7,6 +7,9 @@ import { labelFor } from '../../lib/modelLabel'
 import type { AfterSalesQuery, AfterSalesStatus, Model } from '../../lib/types'
 import { Button, Confirm, ErrorText, Loading, Toast, fmtDate, fmtDateTime, inputClass } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
+import { DownloadButton } from '../../components/DownloadButton'
+import { downloadCsv, monthsAgo, sheetDateTime } from '../../lib/download'
+import { selectAll } from '../../lib/selectAll'
 
 interface Data {
   queries: AfterSalesQuery[]
@@ -144,6 +147,33 @@ export function AfterSalesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            {isManager && (
+              <DownloadButton
+                onDownload={async (months) => {
+                  const { data: rows, error } = await selectAll<AfterSalesQuery>(() =>
+                    supabase!.from('aftersales').select('*').gte('created_at', monthsAgo(months)).order('created_at').order('id'),
+                  )
+                  if (error || !rows) return setToast(friendlyError(error))
+                  downloadCsv(
+                    `after-sales-last-${months}-months`,
+                    ['Logged', 'Invoice number', 'Machine', 'Issue', 'Status', 'Urgent', 'Flagged to', 'Logged by', 'Last update', 'Resolved', 'Updates'],
+                    rows.map((q) => [
+                      sheetDateTime(q.created_at),
+                      q.invoice_ref,
+                      q.model_id ? labelFor(q.model_id, data.models) : '',
+                      q.issue,
+                      statusInfo[q.status].label,
+                      q.urgent ? 'Yes' : 'No',
+                      personName(profiles, q.assignee_id),
+                      personName(profiles, q.created_by),
+                      sheetDateTime(q.updated_at),
+                      q.resolved_at ? sheetDateTime(q.resolved_at) : '',
+                      q.updates.map((u) => `${sheetDateTime(u.at)} ${personName(profiles, u.by)}: ${u.text}`).join(' | '),
+                    ]),
+                  )
+                }}
+              />
+            )}
           </div>
 
           {shown.length === 0 ? (

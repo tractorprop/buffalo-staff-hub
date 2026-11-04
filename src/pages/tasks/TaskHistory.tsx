@@ -8,7 +8,7 @@ import { HistorySection, useAuditLog, type HistoryEvent } from '../../components
 export function TaskHistory({ tasks }: { tasks: Task[] }) {
   const profiles = useProfiles()
   const [days, setDays] = useState(180)
-  const { data, error, reload } = useAuditLog('tasks', days)
+  const { data, error, reload, loading } = useAuditLog('tasks', days)
   const now = today()
 
   const events = useMemo(() => {
@@ -94,6 +94,9 @@ export function TaskHistory({ tasks }: { tasks: Task[] }) {
           ['edited', '✏️ Edited'],
         ]}
         days={days}
+      fileName="task-history"
+      loading={loading}
+      onDays={(n) => setDays((d) => Math.max(d, n))}
         onLoadOlder={() => setDays((d) => d + 365)}
         error={error}
         onDeleted={reload}
