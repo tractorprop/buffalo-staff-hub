@@ -70,9 +70,9 @@ export function WaitlistForm({
       }
       return row
     })
-    const { error } = entry
-      ? await supabase.from('waitlist').update(rows[0]).eq('id', entry.id)
-      : await supabase.from('waitlist').insert(rows)
+    // Editing: the first machine is this entry; any machines added become new entries for the same customer.
+    let { error } = entry ? await supabase.from('waitlist').update(rows[0]).eq('id', entry.id) : await supabase.from('waitlist').insert(rows)
+    if (!error && entry && rows.length > 1) ({ error } = await supabase.from('waitlist').insert(rows.slice(1)))
     setBusy(false)
     if (error)
       return setError(/deposit/.test(error.message) ? 'Deposits are not switched on yet. The founder needs to run database/20-waitlist-deposits.sql in Supabase.' : friendlyError(error))
@@ -94,7 +94,7 @@ export function WaitlistForm({
           </Field>
         </div>
         <div>
-          <div className="text-sm font-medium">{entry ? 'Machine wanted *' : 'Machines wanted *'}</div>
+          <div className="text-sm font-medium">Machines wanted *</div>
           <div className="mt-1 space-y-2">
             {picks.map((p) => {
               const m = models.find((x) => x.id === p.modelId)
@@ -111,7 +111,7 @@ export function WaitlistForm({
                       ))}
                     </select>
                   )}
-                  {picks.length > 1 && (
+                  {picks.length > 1 && !(entry && p.key === 0) && (
                     <Button size="sm" variant="danger" className="font-bold" onClick={() => setPicks((ps) => ps.filter((x) => x.key !== p.key))}>
                       ✕ Remove
                     </Button>
@@ -120,15 +120,11 @@ export function WaitlistForm({
               )
             })}
           </div>
-          {!entry && (
-            <Button size="sm" className="mt-2" onClick={() => setPicks((ps) => [...ps, { key: Date.now(), modelId: '', size: '' }])}>
-              + Add another machine
-            </Button>
-          )}
+          <Button size="sm" className="mt-2" onClick={() => setPicks((ps) => [...ps, { key: Date.now(), modelId: '', size: '' }])}>
+            + Add another machine
+          </Button>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {entry
-              ? 'To add more machines for this customer, add them as a new customer entry.'
-              : 'The customer appears under each machine, and is flagged when any of them is back in stock.'}
+            The customer appears under each machine, and is flagged when any of them is back in stock.
           </p>
         </div>
         <div className={`rounded-lg border-2 p-3 ${deposit ? 'border-green-600 bg-green-50 dark:bg-green-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
