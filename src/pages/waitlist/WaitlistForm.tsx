@@ -4,6 +4,7 @@ import type { Model, WaitlistEntry } from '../../lib/types'
 import { Button, ErrorText, Field, Modal, inputClass, today } from '../../components/ui'
 import { useAuth } from '../../auth/AuthProvider'
 import { ModelPicker } from '../../components/ModelPicker'
+import { modelLabel } from '../../lib/modelLabel'
 
 export function WaitlistForm({
   models,
@@ -25,42 +26,53 @@ export function WaitlistForm({
   const [name, setName] = useState(entry?.customer_name ?? '')
   const [phone, setPhone] = useState(entry?.phone ?? '')
   const [email, setEmail] = useState(entry?.email ?? '')
-  const [modelId, setModelId] = useState(entry?.model_id ?? defaultModelId ?? '')
-  const [size, setSize] = useState(entry?.size_wanted ?? '')
+  // The machines wanted. A new customer can want several: one waiting-list entry is saved per machine.
+  const [picks, setPicks] = useState<{ key: number; modelId: string; size: string }[]>([
+    { key: 0, modelId: entry?.model_id ?? defaultModelId ?? '', size: entry?.size_wanted ?? '' },
+  ])
+  const [depositFor, setDepositFor] = useState(0) // which machine the deposit is for (index in picks)
+  const updatePick = (key: number, change: Partial<{ modelId: string; size: string }>) =>
+    setPicks((ps) => ps.map((p) => (p.key === key ? { ...p, ...change } : p)))
+  const chosen = picks.filter((p) => p.modelId)
   const [notes, setNotes] = useState(entry?.notes ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const model = models.find((m) => m.id === modelId)
 
   async function save(e: FormEvent) {
     e.preventDefault()
     if (!supabase) return
-    if (!modelId) return setError('Please choose the model the customer wants.')
+    if (!chosen.length) return setError('Please choose the machine the customer wants.')
+    if (new Set(chosen.map((p) => p.modelId)).size < chosen.length) return setError('The same machine is chosen twice.')
     if (!phone.trim() && !email.trim()) return setError('Please enter a phone number or an email so we can contact them.')
     const amountValue = amount.trim() === '' ? null : Number(amount.replace(/[£,\s]/g, ''))
     if (deposit && !(amountValue !== null && amountValue > 0))
       return setError('Enter the deposit amount (more than £0), or untick "Deposit received" if no deposit has been paid.')
     setBusy(true)
     setError('')
-    const row: Record<string, unknown> = {
-      customer_name: name.trim(),
-      phone: phone.trim() || null,
-      email: email.trim() || null,
-      model_id: modelId,
-      size_wanted: size || null,
-      notes: notes.trim() || null,
-    }
-    // Only send deposit fields once the database has them (or a deposit is being recorded).
-    if (deposit || entry?.deposit_paid !== undefined) {
-      row.deposit_paid = deposit
-      row.deposit_amount = deposit ? amountValue : null
-      row.deposit_date = deposit ? depositDate || null : null
-      row.deposit_by = deposit ? ((entry?.deposit_paid ? entry.deposit_by : profile?.id) ?? null) : null
-    }
+    const rows = chosen.map((p, i) => {
+      const row: Record<string, unknown> = {
+        customer_name: name.trim(),
+        phone: phone.trim() || null,
+        email: email.trim() || null,
+        model_id: p.modelId,
+        size_wanted: p.size || null,
+        notes: notes.trim() || null,
+      }
+      // Only send deposit fields once the database has them (or a deposit is being recorded).
+      // A deposit goes on one machine only, so it isn't counted twice.
+      const paid = deposit && i === Math.min(depositFor, chosen.length - 1)
+      if (deposit || entry?.deposit_paid !== undefined) {
+        row.deposit_paid = paid
+        row.deposit_amount = paid ? amountValue : null
+        row.deposit_date = paid ? depositDate || null : null
+        row.deposit_by = paid ? ((entry?.deposit_paid ? entry.deposit_by : profile?.id) ?? null) : null
+      }
+      return row
+    })
     const { error } = entry
-      ? await supabase.from('waitlist').update(row).eq('id', entry.id)
-      : await supabase.from('waitlist').insert(row)
+      ? await supabase.from('waitlist').update(rows[0]).eq('id', entry.id)
+      : await supabase.from('waitlist').insert(rows)
     setBusy(false)
     if (error)
       return setError(/deposit/.test(error.message) ? 'Deposits are not switched on yet. The founder needs to run database/20-waitlist-deposits.sql in Supabase.' : friendlyError(error))
@@ -81,26 +93,44 @@ export function WaitlistForm({
             <input type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
         </div>
-        <Field label="Model wanted *">
-          <ModelPicker
-            models={models}
-            value={modelId}
-            onChange={(id) => {
-              setModelId(id)
-              setSize('')
-            }}
-          />
-        </Field>
-        {model && model.sizes.length > 0 && (
-          <Field label="Size wanted" hint="Optional. For information only: the customer is alerted when any size of this model is in stock.">
-            <select className={inputClass} value={size} onChange={(e) => setSize(e.target.value)}>
-              <option value="">Any / not sure</option>
-              {model.sizes.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
-          </Field>
-        )}
+        <div>
+          <div className="text-sm font-medium">{entry ? 'Machine wanted *' : 'Machines wanted *'}</div>
+          <div className="mt-1 space-y-2">
+            {picks.map((p) => {
+              const m = models.find((x) => x.id === p.modelId)
+              return (
+                <div key={p.key} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+                  <div className="min-w-48 flex-1">
+                    <ModelPicker models={models} value={p.modelId} onChange={(id) => updatePick(p.key, { modelId: id, size: '' })} />
+                  </div>
+                  {m && m.sizes.length > 0 && (
+                    <select className={inputClass} style={{ width: '9rem' }} value={p.size} onChange={(e) => updatePick(p.key, { size: e.target.value })} aria-label="Size wanted">
+                      <option value="">Any size</option>
+                      {m.sizes.map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
+                  {picks.length > 1 && (
+                    <Button size="sm" variant="danger" className="font-bold" onClick={() => setPicks((ps) => ps.filter((x) => x.key !== p.key))}>
+                      ✕ Remove
+                    </Button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {!entry && (
+            <Button size="sm" className="mt-2" onClick={() => setPicks((ps) => [...ps, { key: Date.now(), modelId: '', size: '' }])}>
+              + Add another machine
+            </Button>
+          )}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {entry
+              ? 'To add more machines for this customer, add them as a new customer entry.'
+              : 'The customer appears under each machine, and is flagged when any of them is back in stock.'}
+          </p>
+        </div>
         <div className={`rounded-lg border-2 p-3 ${deposit ? 'border-green-600 bg-green-50 dark:bg-green-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" className="h-5 w-5 accent-green-600" checked={deposit} onChange={(e) => setDeposit(e.target.checked)} />
@@ -115,6 +145,17 @@ export function WaitlistForm({
               <Field label="Amount (£) *">
                 <input inputMode="decimal" className={inputClass} placeholder="e.g. 500" value={amount} onChange={(e) => setAmount(e.target.value)} />
               </Field>
+              {chosen.length > 1 && (
+                <Field label="Deposit is for">
+                  <select className={inputClass} value={Math.min(depositFor, chosen.length - 1)} onChange={(e) => setDepositFor(Number(e.target.value))}>
+                    {chosen.map((p, i) => (
+                      <option key={p.key} value={i}>
+                        {modelLabel(models.find((m) => m.id === p.modelId), models, p.size || null)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field label="Date received">
                 <input type="date" className={inputClass} value={depositDate} onChange={(e) => setDepositDate(e.target.value)} />
               </Field>
