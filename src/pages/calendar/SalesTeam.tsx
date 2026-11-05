@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import type { Profile } from '../../lib/types'
-import { ErrorText } from '../../components/ui'
+import { Confirm, ErrorText } from '../../components/ui'
 
 // Founder only: tick who is in the sales team. Sales staff can add events and see sales-only events.
 export function SalesTeam({ profiles }: { profiles: Profile[] }) {
   const [team, setTeam] = useState<Record<string, boolean>>(() => Object.fromEntries(profiles.map((p) => [p.id, p.team === 'sales'])))
   const [error, setError] = useState('')
+  const [pending, setPending] = useState<{ p: Profile; inSales: boolean } | null>(null) // waiting for confirmation
   const people = profiles.filter((p) => p.role === 'staff')
 
   async function toggle(p: Profile, inSales: boolean) {
@@ -31,13 +32,29 @@ export function SalesTeam({ profiles }: { profiles: Profile[] }) {
         <div className="flex flex-wrap gap-x-5 gap-y-1.5">
           {people.map((p) => (
             <label key={p.id} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="h-4 w-4 accent-orange-500" checked={!!team[p.id]} onChange={(e) => toggle(p, e.target.checked)} />
+              <input type="checkbox" className="h-4 w-4 accent-orange-500" checked={!!team[p.id]} onChange={(e) => setPending({ p, inSales: e.target.checked })} />
               {p.full_name || p.email}
             </label>
           ))}
         </div>
       )}
       <ErrorText>{error}</ErrorText>
+      {pending && (
+        <Confirm
+          title={pending.inSales ? `Add ${pending.p.full_name || pending.p.email} to the sales team?` : `Remove ${pending.p.full_name || pending.p.email} from the sales team?`}
+          message={
+            pending.inSales
+              ? 'They will be able to add events (for everyone or sales only) and see sales-only events such as customer visits.'
+              : "They will no longer see sales-only events or be able to add events. Events they already added stay on the calendar."
+          }
+          confirmLabel={pending.inSales ? 'Yes, add to sales' : 'Yes, remove from sales'}
+          onConfirm={async () => {
+            await toggle(pending.p, pending.inSales)
+            setPending(null)
+          }}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </section>
   )
 }
