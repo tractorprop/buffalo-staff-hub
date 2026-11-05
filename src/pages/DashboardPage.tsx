@@ -12,31 +12,27 @@ import { ErrorText, Loading, fmtDate, today } from '../components/ui'
 import { Card, linkClass } from '../components/StockOverview'
 import { Legend, MonthCalendar } from '../components/MonthCalendar'
 import { ContainerTimeline } from '../components/ContainerTimeline'
-import { modelLabel } from '../lib/modelLabel'
 
 interface Data {
   models: Model[]
   machines: Pick<Machine, 'model_id' | 'size' | 'status' | 'sold_date' | 'eta' | 'container_ref'>[]
-  waiting: { model_id: string }[]
   openTasks: { assignee_id: string | null; due_date: string | null; start_date?: string | null }[]
   calendar: CalendarData
 }
 
 async function loadAll() {
-  const [models, machines, waiting, tasks, calendar] = await Promise.all([
+  const [models, machines, tasks, calendar] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
     selectAll(() => supabase!.from('machines').select('model_id, size, status, sold_date, eta, container_ref').order('id')),
-    supabase!.from('waitlist').select('model_id').eq('contacted', false),
     supabase!.from('tasks').select('*').eq('done', false),
     loadCalendar(),
   ])
-  const error = models.error ?? machines.error ?? waiting.error ?? tasks.error ?? calendar.error
+  const error = models.error ?? machines.error ?? tasks.error ?? calendar.error
   if (error) return { data: null, error }
   return {
     data: {
       models: models.data as Model[],
       machines: machines.data as Data['machines'],
-      waiting: waiting.data as Data['waiting'],
       openTasks: tasks.data as Data['openTasks'],
       calendar: calendar.data!,
     },
@@ -53,15 +49,11 @@ const diggers = [
 export function DashboardPage() {
   const { profile, isManager } = useAuth()
   const profiles = useProfiles()
-  const { data, error, loading } = useLive<Data>(['models', 'machines', 'waitlist', 'tasks', 'holidays', 'events'], loadAll)
+  const { data, error, loading } = useLive<Data>(['models', 'machines', 'tasks', 'holidays', 'events'], loadAll)
   const now = today()
 
   const d = useMemo(() => {
     if (!data) return null
-    const inStockBy = new Map<string, number>()
-    for (const m of data.machines) if (m.status === 'in_stock') inStockBy.set(m.model_id, (inStockBy.get(m.model_id) ?? 0) + 1)
-    const waitingBy = new Map<string, number>()
-    for (const w of data.waiting) waitingBy.set(w.model_id, (waitingBy.get(w.model_id) ?? 0) + 1)
 
     const containers = groupContainers(
       data.machines.filter((m) => m.status === 'en_route'),
@@ -77,9 +69,6 @@ export function DashboardPage() {
       myToday: mine.filter((t) => t.due_date === now).length,
       offToday: leave.filter((h) => overlaps(h.start_date, h.end_date, now, now)),
       offThisWeek: leave.filter((h) => overlaps(h.start_date, h.end_date, addDays(now, 1), addDays(now, 6))),
-      toCall: data.models
-        .filter((m) => (inStockBy.get(m.id) ?? 0) > 0 && (waitingBy.get(m.id) ?? 0) > 0)
-        .map((m) => ({ model: m, inStock: inStockBy.get(m.id)!, waiting: waitingBy.get(m.id)! })),
       containers,
       items: calendarItems(data.calendar, profiles),
     }
@@ -112,25 +101,6 @@ export function DashboardPage() {
         </div>
         <div className="h-1.5 bg-brand-500" />
       </section>
-
-      {d.toCall.length > 0 && (
-        <Card title="📞 Customers to call: back in stock" tone="alert">
-          <ul className="space-y-2">
-            {d.toCall.map((c) => (
-              <li key={c.model.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-white px-3 py-2 text-sm dark:bg-slate-900">
-                <span className="font-semibold">{modelLabel(c.model, data?.models ?? [])}</span>
-                <span className="text-green-700 dark:text-green-400">{c.inStock} in stock</span>
-                <span>
-                  {c.waiting} customer{c.waiting === 1 ? '' : 's'} waiting
-                </span>
-                <Link to={`/waitlist?model=${c.model.id}`} className={`ml-auto ${linkClass}`}>
-                  Open waiting list →
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
 
       <ContainerTimeline containers={d.containers} today={now} />
 

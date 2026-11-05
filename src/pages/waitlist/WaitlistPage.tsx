@@ -6,7 +6,7 @@ import { useLive } from '../../lib/useLive'
 import { useAuth } from '../../auth/AuthProvider'
 import { personName, useProfiles } from '../../lib/useProfiles'
 import type { Model, WaitlistEntry } from '../../lib/types'
-import { Button, Confirm, Empty, ErrorText, Loading, Toast, fmtDate, inputClass } from '../../components/ui'
+import { Button, Confirm, Empty, ErrorText, Loading, Modal, Toast, fmtDate, inputClass } from '../../components/ui'
 import { WaitlistForm } from './WaitlistForm'
 import { WaitlistHistory } from './WaitlistHistory'
 import { modelLabel } from '../../lib/modelLabel'
@@ -23,7 +23,7 @@ interface Data {
 async function loadAll() {
   const [models, entries, inStock] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
-    supabase!.from('waitlist').select('*').order('created_at'),
+    selectAll(() => supabase!.from('waitlist').select('*').order('created_at').order('id')),
     selectAll(() => supabase!.from('machines').select('model_id').eq('status', 'in_stock').order('id')),
   ])
   const error = models.error ?? entries.error ?? inStock.error
@@ -123,6 +123,36 @@ export function WaitlistPage() {
 
   const waitingTotal = data?.entries.filter((e) => !e.contacted).length ?? 0
 
+  // Customers to call: still waiting, and their machine is back in stock. Deposits first, then longest waiting.
+  const toCall = (data?.entries ?? [])
+    .filter((e) => !e.contacted && inStockOf(e.model_id) > 0)
+    .sort((a, b) => Number(!!b.deposit_paid) - Number(!!a.deposit_paid) || a.created_at.localeCompare(b.created_at))
+  const [showAllToCall, setShowAllToCall] = useState(false)
+  const callRow = (e: WaitlistEntry) => (
+    <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-white px-3 py-2 text-sm dark:bg-slate-900">
+      <span className="font-semibold">{e.customer_name}</span>
+      {e.deposit_paid && <span className="rounded-full bg-green-600 px-2 py-0.5 text-xs font-bold text-white">💷 Deposit</span>}
+      {e.phone && (
+        <a href={`tel:${e.phone.replace(/\s/g, '')}`} className="text-sky-700 underline dark:text-sky-300">
+          📞 {e.phone}
+        </a>
+      )}
+      {!e.phone && e.email && (
+        <a href={`mailto:${e.email}`} className="break-all text-sky-700 underline dark:text-sky-300">
+          ✉️ {e.email}
+        </a>
+      )}
+      <span className="text-slate-600 dark:text-slate-300">
+        wants <strong>{modelLabel(data?.models.find((m) => m.id === e.model_id), data?.models ?? [])}</strong>
+        {e.size_wanted && ` (${e.size_wanted})`}
+      </span>
+      <span className="text-green-700 dark:text-green-400">{inStockOf(e.model_id)} in stock</span>
+      <Button size="sm" variant="primary" className="ml-auto" onClick={() => setContacted(e, true)}>
+        Mark contacted
+      </Button>
+    </li>
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -134,6 +164,23 @@ export function WaitlistPage() {
           + Add customer
         </Button>
       </div>
+
+      {toCall.length > 0 && (
+        <section className="rounded-xl border border-green-300 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950/30">
+          <h2 className="mb-3 font-semibold">📞 Customers to call: back in stock ({toCall.length})</h2>
+          <ul className="space-y-2">{toCall.slice(0, 5).map(callRow)}</ul>
+          {toCall.length > 5 && (
+            <button onClick={() => setShowAllToCall(true)} className="mt-3 text-sm font-medium text-sky-700 underline dark:text-sky-300">
+              Open all customers to call back ({toCall.length}) →
+            </button>
+          )}
+        </section>
+      )}
+      {showAllToCall && (
+        <Modal title={`📞 Customers to call: back in stock (${toCall.length})`} onClose={() => setShowAllToCall(false)} wide>
+          <ul className="space-y-2">{toCall.map(callRow)}</ul>
+        </Modal>
+      )}
 
       {filteredModel && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm dark:bg-slate-800">
