@@ -47,7 +47,7 @@ const diggers = [
 ]
 
 export function DashboardPage() {
-  const { profile, isManager } = useAuth()
+  const { profile, isManager, isSales } = useAuth()
   const profiles = useProfiles()
   const { data, error, loading } = useLive<Data>(['models', 'machines', 'tasks', 'holidays', 'events'], loadAll)
   const now = today()
@@ -109,7 +109,7 @@ export function DashboardPage() {
           <Card title="Calendar" action={<Link to="/calendar" className={linkClass}>Open calendar</Link>}>
             <MonthCalendar month={now} items={d.items} maxPerDay={2} />
             <div className="mt-2">
-              <Legend />
+              <Legend sales={isManager || isSales} />
             </div>
           </Card>
         </div>

@@ -1,7 +1,7 @@
 import { addDays, addMonths, monthLabel, monthStart, parse, ymd } from '../lib/dates'
 import { today } from './ui'
 
-export type Tone = 'green' | 'amber' | 'blue' | 'purple' | 'grey'
+export type Tone = 'green' | 'amber' | 'blue' | 'orange' | 'purple' | 'grey'
 
 export interface CalItem {
   key: string
@@ -15,6 +15,7 @@ const toneClass: Record<Tone, string> = {
   green: 'bg-green-100 text-green-900 dark:bg-green-900/60 dark:text-green-100',
   amber: 'bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100',
   blue: 'bg-sky-100 text-sky-900 dark:bg-sky-900/60 dark:text-sky-100',
+  orange: 'bg-orange-100 text-orange-900 dark:bg-orange-900/60 dark:text-orange-100',
   purple: 'bg-violet-100 text-violet-900 dark:bg-violet-900/60 dark:text-violet-100',
   grey: 'bg-slate-100 text-slate-500 line-through dark:bg-slate-800 dark:text-slate-400',
 }
@@ -26,10 +27,10 @@ export const legend: { tone: Tone; label: string }[] = [
   { tone: 'purple', label: 'Container due' },
 ]
 
-export function Legend() {
+export function Legend({ sales = false }: { sales?: boolean }) {
   return (
     <div className="flex flex-wrap gap-3 text-xs">
-      {legend.map((l) => (
+      {[...legend, ...(sales ? [{ tone: 'orange' as Tone, label: 'Sales event' }] : [])].map((l) => (
         <span key={l.tone} className="flex items-center gap-1">
           <span className={`inline-block h-3 w-3 rounded ${toneClass[l.tone]}`} /> {l.label}
         </span>

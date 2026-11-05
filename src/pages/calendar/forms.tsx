@@ -169,7 +169,8 @@ export function HolidayForm({
   )
 }
 
-export function EventForm({ event, onClose }: { event?: CalendarEvent; onClose: () => void }) {
+export function EventForm({ event, onClose, canChooseAudience = false }: { event?: CalendarEvent; onClose: () => void; canChooseAudience?: boolean }) {
+  const [audience, setAudience] = useState<'everyone' | 'sales'>(event?.audience ?? 'everyone')
   const [title, setTitle] = useState(event?.title ?? '')
   const [start, setStart] = useState(event?.start_date ?? '')
   const [end, setEnd] = useState(event?.end_date ?? '')
@@ -183,7 +184,9 @@ export function EventForm({ event, onClose }: { event?: CalendarEvent; onClose: 
     if (end < start) return setError('The end date must be on or after the start date.')
     setBusy(true)
     setError('')
-    const row = { title: title.trim(), start_date: start, end_date: end, note: note.trim() || null }
+    const row: Record<string, unknown> = { title: title.trim(), start_date: start, end_date: end, note: note.trim() || null }
+    // Only send who it's for once the database has that column (or "sales" was chosen).
+    if (audience === 'sales' || event?.audience !== undefined) row.audience = audience
     const { error } = event
       ? await supabase.from('events').update(row).eq('id', event.id)
       : await supabase.from('events').insert(row)
@@ -192,7 +195,9 @@ export function EventForm({ event, onClose }: { event?: CalendarEvent; onClose: 
       return setError(
         /events/.test(error.message) && /not find|does not exist/i.test(error.message)
           ? 'Events are not switched on yet. Run database/03-calendar-and-low-stock.sql in Supabase first.'
-          : friendlyError(error),
+          : /audience/.test(error.message)
+            ? 'Sales events are not switched on yet. The founder needs to run database/24-sales-team-events.sql in Supabase.'
+            : friendlyError(error),
       )
     onClose()
   }
@@ -220,6 +225,34 @@ export function EventForm({ event, onClose }: { event?: CalendarEvent; onClose: 
             <input type="date" required min={start} className={inputClass} value={end} onChange={(e) => setEnd(e.target.value)} />
           </Field>
         </div>
+        {canChooseAudience && (
+          <Field label="Who sees it?">
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['everyone', '👥 Everyone', 'e.g. exhibition, office closed'],
+                  ['sales', '🤝 Sales team only', 'e.g. customer visit'],
+                ] as const
+              ).map(([v, label, hint]) => (
+                <button
+                  type="button"
+                  key={v}
+                  onClick={() => setAudience(v)}
+                  className={`rounded-lg border px-2 py-2 text-left text-sm ${
+                    audience === v
+                      ? v === 'sales'
+                        ? 'border-orange-500 bg-orange-50 font-semibold text-orange-800 dark:bg-orange-950/40 dark:text-orange-200'
+                        : 'border-sky-500 bg-sky-50 font-semibold text-sky-800 dark:bg-sky-950/40 dark:text-sky-200'
+                      : 'border-slate-300 dark:border-slate-700'
+                  }`}
+                >
+                  {label}
+                  <span className="block text-xs font-normal text-slate-500">{hint}</span>
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
         <Field label="Note">
           <textarea className={inputClass} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>

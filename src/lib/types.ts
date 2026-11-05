@@ -5,6 +5,7 @@ export interface Profile {
   full_name: string | null
   email: string | null
   role: Role
+  team?: 'sales' | 'warehouse' | null // after 24-sales-team-events.sql; empty = warehouse
 }
 
 export interface Model {
@@ -118,6 +119,7 @@ export interface CalendarEvent {
   note: string | null
   created_by: string | null
   created_at: string
+  audience?: 'everyone' | 'sales' // after 24-sales-team-events.sql
 }
 
 export interface CompanySettings {

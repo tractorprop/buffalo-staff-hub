@@ -8,6 +8,7 @@ interface AuthState {
   profile: Profile | null
   isManager: boolean // managers and the founder
   isFounder: boolean
+  isSales: boolean // in the sales team (set by the founder)
   loading: boolean
   signOut: () => Promise<void>
 }
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     supabase
       .from('profiles')
-      .select('id, full_name, email, role')
+      .select('*')
       .eq('id', userId)
       .maybeSingle()
       .then(({ data }) => {
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     isManager: profile?.role === 'manager' || profile?.role === 'founder',
     isFounder: profile?.role === 'founder',
+    isSales: profile?.team === 'sales',
     loading,
     signOut: async () => {
       await supabase?.auth.signOut()

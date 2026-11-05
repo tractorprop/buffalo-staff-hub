@@ -11,6 +11,7 @@ import { Button, Confirm, ErrorText, Loading, Modal, Toast, fmtDate, today } fro
 import { Legend, MonthCalendar } from '../../components/MonthCalendar'
 import { EventForm, HolidayForm } from './forms'
 import { LeavePanel } from './LeavePanel'
+import { SalesTeam } from './SalesTeam'
 import { balanceFor, loadAllowances, type Allowance } from '../../lib/leave'
 
 const statusBadge: Record<HolidayStatus, string> = {
@@ -24,7 +25,8 @@ function dateRange(a: string, b: string) {
 }
 
 export function CalendarPage() {
-  const { profile, isManager } = useAuth()
+  const { profile, isManager, isFounder, isSales } = useAuth()
+  const canAddEvents = isManager || isSales
   const profiles = useProfiles()
   const { data, error, loading } = useLive<CalendarData>(calendarTables, loadCalendar)
   // Allowances: the database only returns the person's own row (or everyone's for managers).
@@ -128,9 +130,14 @@ export function CalendarPage() {
         <Modal title={e.title} onClose={() => setSelected(null)}>
           <div className="space-y-2 text-sm">
             <p>{dateRange(e.start_date, e.end_date)}</p>
+            {e.audience === 'sales' && (
+              <p className="inline-block rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800 dark:bg-orange-950 dark:text-orange-200">
+                🤝 Sales team only
+              </p>
+            )}
             {e.note && <p className="text-slate-600 dark:text-slate-300">{e.note}</p>}
           </div>
-          {isManager && (
+          {(isManager || (isSales && e.created_by === profile?.id)) && (
             <div className="mt-5 flex justify-end gap-2">
               <Button
                 onClick={() => {
@@ -174,7 +181,7 @@ export function CalendarPage() {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">Calendar</h1>
         <div className="ml-auto flex flex-wrap gap-2">
-          <Button onClick={() => setEventForm({})} disabled={!isManager} title={isManager ? undefined : 'Managers only'}>
+          <Button onClick={() => setEventForm({})} disabled={!canAddEvents} title={canAddEvents ? undefined : 'CEO, founder and sales team only'}>
             + Add event
           </Button>
           <Button variant="primary" onClick={() => setHolidayForm(true)}>
@@ -230,8 +237,9 @@ export function CalendarPage() {
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
             <section className="space-y-2">
               <MonthCalendar month={month} items={items} onMonthChange={setMonth} onItemClick={setSelected} />
-              <Legend />
+              <Legend sales={canAddEvents} />
             </section>
+            {isFounder && profiles.length > 0 && <SalesTeam key={profiles.length} profiles={profiles} />}
             {profile && data && (
               <LeavePanel
                 me={profile.id}
@@ -276,7 +284,7 @@ export function CalendarPage() {
           onClose={() => setHolidayForm(false)}
         />
       )}
-      {eventForm && <EventForm event={eventForm.event} onClose={() => setEventForm(null)} />}
+      {eventForm && <EventForm event={eventForm.event} canChooseAudience={canAddEvents} onClose={() => setEventForm(null)} />}
       {confirm && <Confirm title={confirm.title} message={confirm.message} confirmLabel={confirm.label} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
     </div>

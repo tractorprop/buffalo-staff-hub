@@ -11,7 +11,7 @@ export function useProfiles() {
     if (cache || !supabase) return
     supabase
       .from('profiles')
-      .select('id, full_name, email, role')
+      .select('*')
       .order('full_name')
       .then(({ data }) => {
         cache = (data as Profile[]) ?? []

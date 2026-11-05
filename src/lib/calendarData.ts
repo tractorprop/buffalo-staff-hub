@@ -77,7 +77,8 @@ export function calendarItems(data: CalendarData, profiles: Profile[], { showDec
       tone: h.status === 'approved' ? 'green' : h.status === 'pending' ? 'amber' : 'grey',
     })
   }
-  for (const e of data.events) items.push({ key: `e:${e.id}`, start: e.start_date, end: e.end_date, label: e.title, tone: 'blue' })
+  for (const e of data.events)
+    items.push({ key: `e:${e.id}`, start: e.start_date, end: e.end_date, label: e.title, tone: e.audience === 'sales' ? 'orange' : 'blue' })
   for (const c of data.containers)
     if (c.eta) items.push({ key: `c:${c.ref}`, start: c.eta, end: c.eta, label: `🚢 ${c.ref}`, tone: 'purple' })
   return items
