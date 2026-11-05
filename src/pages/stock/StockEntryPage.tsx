@@ -7,7 +7,7 @@ import { personName, useProfiles } from '../../lib/useProfiles'
 import type { AuditEntry, Invoice, Model, ShopifyLink, ShopifyOrder } from '../../lib/types'
 import { Button, Confirm, ErrorText, Loading, Modal, fmtDate, fmtDateTime, inputClass } from '../../components/ui'
 import { ModelPicker } from '../../components/ModelPicker'
-import { invoiceDescription, modelLabel as nameOf } from '../../lib/modelLabel'
+import { invoiceDescription, isMachine, modelLabel as nameOf } from '../../lib/modelLabel'
 import { invoiceNumber } from '../../lib/money'
 import { downloadCsv, monthsAgo, sheetDateTime } from '../../lib/download'
 import { DownloadButton } from '../../components/DownloadButton'
@@ -22,6 +22,7 @@ interface Line {
   qty: number
   fromInvoice?: number // quantity on the invoice/order: model and size are locked, qty can only go down
   itemKeys?: string[] // Shopify listings this line came from
+  parentKey?: number // an accessory ticked under a machine line
 }
 
 // An invoice or Shopify order loaded into the form: its stock items fill the lines.
@@ -87,7 +88,15 @@ async function loadAll(days: number) {
   const [models, inStock, log, orders, links, sent] = await Promise.all([
     supabase!.from('models').select('*').order('model_number'),
     selectAll(() => supabase!.from('machines').select('model_id, size').eq('status', 'in_stock').order('id')),
-    selectAll(() => supabase!.from('audit_log').select('*').eq('table_name', 'machines').gte('changed_at', since).order('changed_at', { ascending: false }).order('id', { ascending: false })),
+    selectAll(() =>
+      supabase!
+        .from('audit_log')
+        .select('*')
+        .eq('table_name', 'machines')
+        .gte('changed_at', since)
+        .order('changed_at', { ascending: false })
+        .order('id', { ascending: false }),
+    ),
     supabase!.from('shopify_orders').select('*, id_text:id::text').order('ordered_at', { ascending: false }).limit(100),
     supabase!.from('shopify_links').select('*'),
     selectAll(() => supabase!.from('machines').select('stock_reference').like('stock_reference', 'Shopify #%').order('id')),
@@ -291,7 +300,7 @@ export function StockEntryPage() {
 
   // Take a line (or an unlinked Shopify listing) off this entry, e.g. it isn't going out today.
   function removeLine(l: Line) {
-    setLines((ls) => ls.filter((x) => x.key !== l.key))
+    setLines((ls) => ls.filter((x) => x.key !== l.key && x.parentKey !== l.key))
     if (l.itemKeys?.length) setInvoice((i) => (i ? { ...i, removed: [...(i.removed ?? []), ...l.itemKeys!] } : i))
   }
   function removeUnlinked(key: string) {
@@ -388,7 +397,14 @@ export function StockEntryPage() {
       ['Date', 'Person', 'Reference', 'Change', 'Item', 'Type'],
       allHistory
         .filter((g) => g.at >= since)
-        .map((g) => [sheetDateTime(g.at), personName(profiles, g.by), g.reference ?? '', g.qty, modelLabel(g.modelId, g.size), g.qty < 0 ? 'Left (sold)' : 'Returned']),
+        .map((g) => [
+          sheetDateTime(g.at),
+          personName(profiles, g.by),
+          g.reference ?? '',
+          g.qty,
+          modelLabel(g.modelId, g.size),
+          g.qty < 0 ? 'Left (sold)' : 'Returned',
+        ]),
     )
   }
   function requestDownload(months: number) {
@@ -605,8 +621,8 @@ export function StockEntryPage() {
             const m = data?.models.find((x) => x.id === l.modelId)
             const have = m && (!m.sizes.length || l.size) ? (stock.get(`${m.id}|${l.size}`) ?? 0) : null
             return (
-              <div key={l.key} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                {!l.fromInvoice && (
+              <div key={l.key} className={`space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800 ${l.parentKey != null ? 'ml-6 border-l-4 border-l-sky-400' : ''}`}>
+                {!l.fromInvoice && l.parentKey == null && (
                   <div className="grid grid-cols-2 gap-2">
                     {(
                       [
@@ -617,7 +633,7 @@ export function StockEntryPage() {
                       <button
                         type="button"
                         key={d}
-                        onClick={() => update(l.key, { direction: d })}
+                        onClick={() => setLines((ls) => ls.map((x) => (x.key === l.key || x.parentKey === l.key ? { ...x, direction: d } : x)))}
                         className={`rounded-lg border px-2 py-2 text-sm font-semibold ${
                           l.direction === d
                             ? d === 'out'
@@ -631,8 +647,15 @@ export function StockEntryPage() {
                     ))}
                   </div>
                 )}
-                <div className="flex flex-wrap items-start gap-2">
-                  {l.fromInvoice ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {l.parentKey != null ? (
+                    <div className="min-w-48 flex-1 py-1">
+                      <span className={`mr-2 font-bold ${l.direction === 'out' ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {l.direction === 'out' ? '− Leaving' : '+ Return'}
+                      </span>
+                      <span className="font-semibold">🔧 {modelLabel(l.modelId, l.size || null)}</span>
+                    </div>
+                  ) : l.fromInvoice ? (
                     <div className="min-w-48 flex-1 py-2">
                       <span className="mr-2 font-bold text-green-700 dark:text-green-400">− Leaving</span>
                       <span className="font-semibold">{modelLabel(l.modelId, l.size)}</span>
@@ -647,11 +670,18 @@ export function StockEntryPage() {
                     </div>
                   ) : (
                     <div className="min-w-48 flex-1">
-                      <ModelPicker models={data?.models ?? []} value={l.modelId} onChange={(id) => update(l.key, { modelId: id, size: '' })} />
+                      <ModelPicker
+                        models={data?.models ?? []}
+                        value={l.modelId}
+                        onChange={(id) =>
+                          // A different machine: drop the accessories ticked for the old one.
+                          setLines((ls) => ls.filter((x) => x.parentKey !== l.key).map((x) => (x.key === l.key ? { ...x, modelId: id, size: '' } : x)))
+                        }
+                      />
                     </div>
                   )}
                   {m && m.sizes.length > 0 && !l.fromInvoice && (
-                    <select className={`${inputClass} w-32`} value={l.size} onChange={(e) => update(l.key, { size: e.target.value })}>
+                    <select className={inputClass} style={{ width: '9rem' }} value={l.size} onChange={(e) => update(l.key, { size: e.target.value })}>
                       <option value="">Size…</option>
                       {m.sizes.map((s) => (
                         <option key={s}>{s}</option>
@@ -664,7 +694,8 @@ export function StockEntryPage() {
                     min={1}
                     max={l.fromInvoice ?? 100}
                     aria-label="Quantity"
-                    className={`${inputClass} w-20`}
+                    className={inputClass}
+                    style={{ width: '5.5rem' }}
                     value={l.qty}
                     onChange={(e) => update(l.key, { qty: parseInt(e.target.value) || 0 })}
                   />
@@ -691,6 +722,45 @@ export function StockEntryPage() {
                     {l.direction === 'out' && l.qty > have && <span className="ml-1 font-medium text-red-600"> (not enough to take out {l.qty})</span>}
                   </p>
                 )}
+                {m &&
+                  isMachine(m) &&
+                  !l.fromInvoice &&
+                  (() => {
+                    // Tick the accessories going with this machine; each ticked one becomes its own line.
+                    const accs = (data?.models ?? [])
+                      .filter((a) => a.kind === 'accessory' && (a.fits_models ?? []).includes(m.id))
+                      .sort((a, b) => a.model_number.localeCompare(b.model_number))
+                    if (!accs.length) return null
+                    const child = (id: string) => lines.find((x) => x.parentKey === l.key && x.modelId === id)
+                    const toggle = (id: string) =>
+                      setLines((ls) => {
+                        const existing = ls.find((x) => x.parentKey === l.key && x.modelId === id)
+                        if (existing) return ls.filter((x) => x.key !== existing.key)
+                        // Put the accessory lines straight after the machine (and its other accessories).
+                        const at = ls.reduce((last, x, i) => (x.key === l.key || x.parentKey === l.key ? i : last), 0)
+                        const line: Line = { key: nextKey++, modelId: id, size: '', direction: l.direction, qty: l.qty || 1, parentKey: l.key }
+                        return [...ls.slice(0, at + 1), line, ...ls.slice(at + 1)]
+                      })
+                    return (
+                      <div className="rounded-lg bg-slate-50 p-2 dark:bg-slate-800/60">
+                        <div className="mb-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          Accessories going with it? Tick any (leave all unticked for none):
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {accs.map((a) => {
+                            const inStock = data?.inStock.filter((x) => x.model_id === a.id).length ?? 0
+                            return (
+                              <label key={a.id} className="flex items-center gap-1.5 text-sm">
+                                <input type="checkbox" className="h-4 w-4 accent-green-600" checked={!!child(a.id)} onChange={() => toggle(a.id)} />
+                                {nameOf(a, data?.models ?? [])}
+                                <span className={`text-xs ${inStock ? 'text-slate-400' : 'text-red-500'}`}>({inStock} in stock)</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
               </div>
             )
           })}
