@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
-import type { AuditEntry, Model } from '../../lib/types'
+import type { AuditEntry, ContainerCheckin, Model } from '../../lib/types'
+import { supabase } from '../../lib/supabase'
+import { useLive } from '../../lib/useLive'
+import { selectAll } from '../../lib/selectAll'
 import { labelFor } from '../../lib/modelLabel'
 import { fmtDate } from '../../components/ui'
 import { HistorySection, countList, countTotal, useAuditLog, type HistoryEvent } from '../../components/HistorySection'
@@ -18,9 +21,10 @@ type Row = {
 
 type Kind = 'container' | 'arrival' | 'sold' | 'returned' | 'added' | 'removed' | 'changed'
 
-const kinds: [Kind, string][] = [
+const kinds: [Kind | 'short', string][] = [
   ['container', '🚢 Containers added'],
   ['arrival', '✅ Arrivals'],
+  ['short', '⚠️ Short arrivals'],
   ['sold', '📤 Sold / left'],
   ['returned', '↩️ Returns'],
   ['added', '➕ Added to stock'],
@@ -37,6 +41,7 @@ interface Group {
   items: Map<string, number>
   extra: Map<string, number> // arrivals: extras found at check-in
   missing: Map<string, number> // arrivals: removed as missing
+  short?: string // arrivals: everything that didn't arrive, from the check-in
   note: string
   ids: number[]
 }
@@ -126,10 +131,17 @@ function toEvent(g: Group): HistoryEvent {
         {list.size > 0 && <div>{countList(list)}</div>}
         {g.note && <div className="text-xs text-slate-500 dark:text-slate-400">{g.note}</div>}
         {g.kind === 'arrival' && g.extra.size > 0 && <div className="text-sky-700 dark:text-sky-300">➕ Extras found: {countList(g.extra)}</div>}
-        {g.kind === 'arrival' && g.missing.size > 0 && <div className="text-amber-700 dark:text-amber-400">⚠️ Missing: {countList(g.missing)}</div>}
+        {g.kind === 'arrival' && (g.short || g.missing.size > 0) && (
+          <div className="mt-1 inline-block rounded-md bg-red-50 px-2 py-0.5 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300">
+            ⚠️ Missing: {g.short ?? countList(g.missing)}
+          </div>
+        )}
       </>
     ),
-    search: `${title} ${countList(g.items)} ${countList(g.extra)} ${countList(g.missing)} ${g.note}`,
+    search: `${title} ${countList(g.items)}${g.extra.size ? ` Extras found: ${countList(g.extra)}` : ''}${
+      g.short || g.missing.size ? ` Missing: ${g.short ?? countList(g.missing)}` : ''
+    } ${g.note}`,
+    tags: g.kind === 'arrival' && (g.short || g.missing.size) ? ['short'] : undefined,
     ids: g.ids,
   }
 }
@@ -138,10 +150,37 @@ function toEvent(g: Group): HistoryEvent {
 export function MachineHistory({ models }: { models: Model[] }) {
   const [days, setDays] = useState(90)
   const { data, error, reload, loading } = useAuditLog('machines', days)
+  // Approved check-ins, for what didn't arrive in each container.
+  const { data: checkins } = useLive<ContainerCheckin[]>(
+    ['container_checkins'],
+    () =>
+      selectAll<ContainerCheckin>(() =>
+        supabase!
+          .from('container_checkins')
+          .select('*')
+          .eq('status', 'approved')
+          .gte('decided_at', new Date(Date.now() - (days + 1) * 864e5).toISOString())
+          .order('decided_at')
+          .order('id'),
+      ),
+    [days],
+  )
   const events = useMemo(() => {
     const label = (r: Row) => labelFor(r.model_id ?? '', models, r.size)
-    return group(data ?? [], label).map(toEvent)
-  }, [data, models])
+    const groups = group(data ?? [], label)
+    for (const g of groups) {
+      if (g.kind !== 'arrival') continue
+      // The check-in approved for this container at the same time as these items arrived.
+      const ci = (checkins ?? []).find(
+        (c) => c.container_ref === g.ref && c.decided_at && Math.abs(new Date(c.decided_at).getTime() - new Date(g.at).getTime()) < 15 * 60e3,
+      )
+      if (ci?.short?.length)
+        g.short = ci.short
+          .map((x) => `${x.qty}× ${labelFor(x.model_id, models, x.size)} (${x.kept ? 'still expected' : 'removed'})`)
+          .join(', ')
+    }
+    return groups.map(toEvent)
+  }, [data, models, checkins])
 
   return (
     <HistorySection

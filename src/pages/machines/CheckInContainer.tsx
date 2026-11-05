@@ -81,17 +81,24 @@ export function CheckInContainer({
     setBusy(true)
     setError('')
     const removeIds = lines.filter((l) => l.missing === 'remove').flatMap((l) => l.ids.slice(l.arrived))
-    const { data: row, error } = await supabase
-      .from('container_checkins')
-      .insert({
-        container_ref: containerRef,
-        arrive_ids: lines.flatMap((l) => l.ids.slice(0, l.arrived)),
-        remove_ids: removeIds,
-        extras: extras.filter((e) => e.modelId).map((e) => ({ model_id: e.modelId, size: e.size || null, qty: e.qty })),
-        location: location.trim() || null,
-      })
-      .select('id')
-      .single()
+    const checkin = {
+      container_ref: containerRef,
+      arrive_ids: lines.flatMap((l) => l.ids.slice(0, l.arrived)),
+      remove_ids: removeIds,
+      extras: extras.filter((e) => e.modelId).map((e) => ({ model_id: e.modelId, size: e.size || null, qty: e.qty })),
+      // What didn't arrive (for the history, to raise with the factory).
+      short: lines
+        .filter((l) => l.arrived < l.ids.length)
+        .map((l) => ({ model_id: l.modelId, size: l.size, qty: l.ids.length - l.arrived, kept: l.missing === 'keep' })),
+      location: location.trim() || null,
+    }
+    let res = await supabase.from('container_checkins').insert(checkin).select('id').single()
+    // Before 23-checkin-shortages.sql there's no "short" column: save without it.
+    if (res.error && /short/.test(res.error.message)) {
+      const { short: _, ...withoutShort } = checkin
+      res = await supabase.from('container_checkins').insert(withoutShort).select('id').single()
+    }
+    const { data: row, error } = res
     if (error || !row) {
       setBusy(false)
       return setError(

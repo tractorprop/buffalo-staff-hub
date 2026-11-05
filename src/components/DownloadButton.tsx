@@ -7,7 +7,7 @@ export function DownloadButton({ onDownload, busy = false }: { onDownload: (mont
   const [working, setWorking] = useState(false)
   return (
     <span className="inline-flex items-center gap-1.5">
-      <select className={`${inputClass} w-auto py-1 text-xs`} value={months} onChange={(e) => setMonths(Number(e.target.value))} aria-label="Period">
+      <select className={`${inputClass} py-1 text-xs`} style={{ width: 'auto' }} value={months} onChange={(e) => setMonths(Number(e.target.value))} aria-label="Period">
         {[3, 6, 12, 24].map((m) => (
           <option key={m} value={m}>
             Last {m} months
@@ -26,7 +26,7 @@ export function DownloadButton({ onDownload, busy = false }: { onDownload: (mont
           }
         }}
       >
-        {busy || working ? 'Preparing…' : '⬇️ Download for Excel'}
+        <span className="whitespace-nowrap">{busy || working ? 'Preparing…' : '⬇️ Download for Excel'}</span>
       </Button>
     </span>
   )

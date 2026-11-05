@@ -18,6 +18,7 @@ export interface HistoryEvent {
   detail?: ReactNode
   search: string // text the search box matches against
   kind?: string // for the filter chips
+  tags?: string[] // extra filter chips this entry also belongs to
   ids?: number[] // activity-log rows behind it (founder can delete them)
 }
 
@@ -106,7 +107,7 @@ export function HistorySection({
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
     return sorted
-      .filter((e) => (!person || e.by === person) && (!kind || e.kind === kind))
+      .filter((e) => (!person || e.by === person) && (!kind || e.kind === kind || !!e.tags?.includes(kind)))
       .filter((e) => !q || `${e.search} ${personName(profiles, e.by)}`.toLowerCase().includes(q))
   }, [sorted, search, person, kind, profiles])
 

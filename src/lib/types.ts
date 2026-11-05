@@ -172,6 +172,7 @@ export interface ContainerCheckin {
   submitted_at: string
   decided_by: string | null
   decided_at: string | null
+  short?: { model_id: string; size: string | null; qty: number; kept: boolean }[] // what didn't arrive (after 23-checkin-shortages.sql)
 }
 
 // A Shopify order waiting to be packed. Only the order number, date and items are kept (no customer details).
