@@ -284,7 +284,7 @@ export function CalendarPage() {
           onClose={() => setHolidayForm(false)}
         />
       )}
-      {eventForm && <EventForm event={eventForm.event} canChooseAudience={canAddEvents} onClose={() => setEventForm(null)} />}
+      {eventForm && <EventForm event={eventForm.event} canChooseAudience={canAddEvents} salesStaff={isSales && !isManager} onClose={() => setEventForm(null)} />}
       {confirm && <Confirm title={confirm.title} message={confirm.message} confirmLabel={confirm.label} onConfirm={confirm.run} onCancel={() => setConfirm(null)} />}
       {toast && <Toast onClose={() => setToast('')}>{toast}</Toast>}
     </div>

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { supabase, friendlyError } from '../../lib/supabase'
 import { workingDays } from '../../lib/dates'
 import type { CalendarEvent, HolidayStatus, HolidayType, Profile } from '../../lib/types'
-import { Button, ErrorText, Field, Modal, inputClass } from '../../components/ui'
+import { Button, ErrorText, Field, Modal, inputClass, Confirm } from '../../components/ui'
 
 export function HolidayForm({
   profiles,
@@ -78,7 +78,11 @@ export function HolidayForm({
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Staff</span>
               <span className="text-xs text-slate-500">{staffIds.length} selected</span>
-              <button type="button" className="ml-auto text-xs font-medium text-sky-700 underline dark:text-sky-300" onClick={() => setStaffIds(profiles.map((p) => p.id))}>
+              <button
+                type="button"
+                className="ml-auto text-xs font-medium text-sky-700 underline dark:text-sky-300"
+                onClick={() => setStaffIds(profiles.map((p) => p.id))}
+              >
                 Select all
               </button>
               <button type="button" className="text-xs font-medium text-sky-700 underline dark:text-sky-300" onClick={() => setStaffIds([])}>
@@ -123,7 +127,8 @@ export function HolidayForm({
             {days} working day{days === 1 ? '' : 's'} (Mon–Fri)
             {left !== null && (
               <span className={days > left ? ' font-semibold text-red-600 dark:text-red-400' : ''}>
-                {' '}· {left} day{left === 1 ? '' : 's'} of annual leave left
+                {' '}
+                · {left} day{left === 1 ? '' : 's'} of annual leave left
                 {days > left && ' (this is more than is left)'}
               </span>
             )}
@@ -169,8 +174,19 @@ export function HolidayForm({
   )
 }
 
-export function EventForm({ event, onClose, canChooseAudience = false }: { event?: CalendarEvent; onClose: () => void; canChooseAudience?: boolean }) {
-  const [audience, setAudience] = useState<'everyone' | 'sales'>(event?.audience ?? 'everyone')
+export function EventForm({
+  event,
+  onClose,
+  canChooseAudience = false,
+  salesStaff = false,
+}: {
+  event?: CalendarEvent
+  onClose: () => void
+  canChooseAudience?: boolean
+  salesStaff?: boolean // sales team (not CEO/founder): new events start as "sales only", and "everyone" needs confirming
+}) {
+  const [audience, setAudience] = useState<'everyone' | 'sales'>(event?.audience ?? (salesStaff ? 'sales' : 'everyone'))
+  const [confirmEveryone, setConfirmEveryone] = useState(false)
   const [title, setTitle] = useState(event?.title ?? '')
   const [start, setStart] = useState(event?.start_date ?? '')
   const [end, setEnd] = useState(event?.end_date ?? '')
@@ -187,9 +203,7 @@ export function EventForm({ event, onClose, canChooseAudience = false }: { event
     const row: Record<string, unknown> = { title: title.trim(), start_date: start, end_date: end, note: note.trim() || null }
     // Only send who it's for once the database has that column (or "sales" was chosen).
     if (audience === 'sales' || event?.audience !== undefined) row.audience = audience
-    const { error } = event
-      ? await supabase.from('events').update(row).eq('id', event.id)
-      : await supabase.from('events').insert(row)
+    const { error } = event ? await supabase.from('events').update(row).eq('id', event.id) : await supabase.from('events').insert(row)
     setBusy(false)
     if (error)
       return setError(
@@ -206,7 +220,14 @@ export function EventForm({ event, onClose, canChooseAudience = false }: { event
     <Modal title={event ? 'Edit event' : 'Add event'} onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
         <Field label="Event *">
-          <input className={inputClass} required autoFocus placeholder="e.g. Agricultural show, stocktake, office closed" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input
+            className={inputClass}
+            required
+            autoFocus
+            placeholder="e.g. Agricultural show, stocktake, office closed"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Start *">
@@ -237,7 +258,7 @@ export function EventForm({ event, onClose, canChooseAudience = false }: { event
                 <button
                   type="button"
                   key={v}
-                  onClick={() => setAudience(v)}
+                  onClick={() => (v === 'everyone' && salesStaff && audience !== 'everyone' ? setConfirmEveryone(true) : setAudience(v))}
                   className={`rounded-lg border px-2 py-2 text-left text-sm ${
                     audience === v
                       ? v === 'sales'
@@ -256,6 +277,18 @@ export function EventForm({ event, onClose, canChooseAudience = false }: { event
         <Field label="Note">
           <textarea className={inputClass} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
+        {confirmEveryone && (
+          <Confirm
+            title="Show this event to everyone?"
+            message="Every member of staff, including the warehouse team, will see it on their calendar. Only choose this for company-wide events such as exhibitions or office closures, not customer visits."
+            confirmLabel="Yes, show to everyone"
+            onConfirm={() => {
+              setAudience('everyone')
+              setConfirmEveryone(false)
+            }}
+            onCancel={() => setConfirmEveryone(false)}
+          />
+        )}
         <ErrorText>{error}</ErrorText>
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
