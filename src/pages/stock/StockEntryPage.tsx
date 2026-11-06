@@ -429,7 +429,7 @@ export function StockEntryPage() {
             <th className="px-3 py-2">Who</th>
             <th className="px-3 py-2">Reference</th>
             <th className="px-3 py-2">Entry</th>
-            {isFounder && <th className="px-3 py-2"></th>}
+            {isManager && <th className="px-3 py-2"></th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -457,7 +457,7 @@ export function StockEntryPage() {
                 <span className="font-medium">{modelLabel(g.modelId, g.size)}</span>
                 <span className="ml-1 text-xs text-slate-500">{g.qty < 0 ? 'left (sold)' : 'returned'}</span>
               </td>
-              {isFounder && (
+              {isManager && (
                 <td className="px-3 py-2 text-right">
                   <button
                     className="text-xs text-red-600 hover:underline dark:text-red-400"
@@ -846,12 +846,19 @@ export function StockEntryPage() {
       )}
       {removeEntry && (
         <Confirm
-          title="Delete this history entry?"
-          message={`"${removeEntry.label}" is removed from the history only. Stock levels do not change.`}
+          title="Delete this stock entry?"
+          message={`"${removeEntry.label}" is deleted and the stock is put back as it was before: items that left go back into stock, and returns go back to sold.`}
+          confirmLabel="Delete and put stock back"
           onConfirm={async () => {
-            const { error } = await supabase!.from('audit_log').delete().in('id', removeEntry.ids)
-            if (error) setFormError(friendlyError(error))
+            const { data: n, error } = await supabase!.rpc('undo_stock_entry', { p_audit_ids: removeEntry.ids })
             setRemoveEntry(null)
+            if (error)
+              setFormError(
+                /undo_stock_entry/.test(error.message)
+                  ? 'Deleting stock entries is not switched on yet. The founder needs to run database/25-undo-stock-entry.sql in Supabase.'
+                  : friendlyError(error),
+              )
+            else setDone(`Stock entry deleted. ${n} item${n === 1 ? '' : 's'} put back as before.`)
             reload()
           }}
           onCancel={() => setRemoveEntry(null)}
