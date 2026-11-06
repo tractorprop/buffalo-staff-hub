@@ -92,7 +92,7 @@ async function loadAll(days: number) {
       supabase!
         .from('audit_log')
         .select('*')
-        .eq('table_name', 'machines')
+        .in('table_name', ['machines', 'stock_entry_deleted'])
         .gte('changed_at', since)
         .order('changed_at', { ascending: false })
         .order('id', { ascending: false }),
@@ -134,9 +134,34 @@ function movements(log: AuditEntry[]) {
       reference: string | null
       qty: number
       ids: number[]
+      deleted?: { entryAt: string; entryBy: string | null } // a deleted stock entry (stock was put back)
     }
   >()
   for (const e of log) {
+    if (e.table_name === 'stock_entry_deleted') {
+      const d = e.old_data as {
+        entry_at?: string
+        entry_by?: string | null
+        reference?: string | null
+        items?: { model_id: string; size: string | null; qty: number }[]
+      } | null
+      for (const it of d?.items ?? []) {
+        const key = `del|${e.id}|${it.model_id}|${it.size ?? ''}|${Math.sign(it.qty)}`
+        const g = groups.get(key) ?? {
+          at: e.changed_at,
+          by: e.changed_by,
+          modelId: it.model_id,
+          size: it.size ?? null,
+          reference: d?.reference ?? null,
+          qty: 0,
+          ids: [],
+          deleted: { entryAt: d?.entry_at ?? e.changed_at, entryBy: d?.entry_by ?? null },
+        }
+        g.qty += it.qty
+        groups.set(key, g)
+      }
+      continue
+    }
     const o = e.old_data as { status?: string } | null
     const n = e.new_data as {
       status?: string
@@ -403,7 +428,11 @@ export function StockEntryPage() {
           g.reference ?? '',
           g.qty,
           modelLabel(g.modelId, g.size),
-          g.qty < 0 ? 'Left (sold)' : 'Returned',
+          g.deleted
+            ? `Deleted (stock put back; entered by ${personName(profiles, g.deleted.entryBy)} ${sheetDateTime(g.deleted.entryAt)})`
+            : g.qty < 0
+              ? 'Left (sold)'
+              : 'Returned',
         ]),
     )
   }
@@ -434,7 +463,7 @@ export function StockEntryPage() {
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {rows.map((g) => (
-            <tr key={`${g.at}${g.modelId}${g.size}${g.qty}${g.reference}`}>
+            <tr key={`${g.at}${g.modelId}${g.size}${g.qty}${g.reference}${g.deleted ? 'd' : ''}`} className={g.deleted ? 'bg-red-50/70 dark:bg-red-950/20' : ''}>
               <td className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{fmtDateTime(g.at)}</td>
               <td className="px-3 py-2">{personName(profiles, g.by)}</td>
               <td className="px-3 py-2">
@@ -451,13 +480,20 @@ export function StockEntryPage() {
                 )}
               </td>
               <td className="px-3 py-2">
-                <span className={`mr-2 font-bold ${g.qty < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                {g.deleted && <span className="mr-1 font-semibold text-red-700 dark:text-red-400">🗑️ Deleted:</span>}
+                <span className={`mr-2 font-bold ${g.deleted ? 'text-slate-500 line-through' : g.qty < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
                   {g.qty < 0 ? `−${-g.qty}` : `+${g.qty}`}
                 </span>
                 <span className="font-medium">{modelLabel(g.modelId, g.size)}</span>
                 <span className="ml-1 text-xs text-slate-500">{g.qty < 0 ? 'left (sold)' : 'returned'}</span>
+                {g.deleted && (
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Entered by {personName(profiles, g.deleted.entryBy)} on {fmtDateTime(g.deleted.entryAt)} · stock put back
+                  </div>
+                )}
               </td>
-              {isManager && (
+              {isManager && g.deleted && <td />}
+              {isManager && !g.deleted && (
                 <td className="px-3 py-2 text-right">
                   <button
                     className="text-xs text-red-600 hover:underline dark:text-red-400"
