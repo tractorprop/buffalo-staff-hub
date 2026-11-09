@@ -1,11 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
+import { supabase, friendlyError } from '../../lib/supabase'
 import { addDays, addMonths, monthLabel, monthStart, overlaps, workingDays } from '../../lib/dates'
 import { personName } from '../../lib/useProfiles'
 import type { Holiday, Profile } from '../../lib/types'
-import { fmtDate } from '../../components/ui'
+import { Button, ErrorText, Field, Modal, fmtDate, inputClass, today } from '../../components/ui'
+import { parse } from '../../lib/dates'
 
 // CEO and founder only: who was off sick in the month on screen, and for how many working days.
 export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; profiles: Profile[]; month: string }) {
+  const [adding, setAdding] = useState(false)
   const rows = useMemo(() => {
     const from = monthStart(month)
     const to = addDays(addMonths(from, 1), -1)
@@ -42,7 +45,11 @@ export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; p
           {total} working day{total === 1 ? '' : 's'} in total
         </span>
         <span className="ml-auto text-xs text-slate-400">Only the CEO and founder can see this</span>
+        <Button size="sm" variant="primary" onClick={() => setAdding(true)}>
+          + Add sick leave
+        </Button>
       </div>
+      {adding && <AddSickLeave profiles={profiles} onClose={() => setAdding(false)} />}
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">Nobody was off sick this month. 👍</p>
       ) : (
@@ -77,5 +84,85 @@ export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; p
       )}
       <p className="mt-2 text-xs text-slate-400">Working days only (Monday to Friday). Sick leave is leave recorded with the type "Sick".</p>
     </section>
+  )
+}
+
+// The last day of a sickness that started on `start` and lasted `days` working days (weekends skipped).
+function lastWorkingDay(start: string, days: number) {
+  let d = start
+  let counted = 0
+  for (let i = 0; i < 400; i++) {
+    const wd = parse(d).getDay()
+    if (wd !== 0 && wd !== 6) counted++
+    if (counted >= days) return d
+    d = addDays(d, 1)
+  }
+  return d
+}
+
+// CEO and founder: record that someone was off sick (saved as approved sick leave).
+function AddSickLeave({ profiles, onClose }: { profiles: Profile[]; onClose: () => void }) {
+  const [who, setWho] = useState('')
+  const [start, setStart] = useState(today())
+  const [days, setDays] = useState('1')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const n = parseInt(days)
+  const end = start && n >= 1 ? lastWorkingDay(start, n) : ''
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    if (!who) return setError('Choose who was off sick.')
+    if (!start) return setError('Enter the first day they were off.')
+    if (!(n >= 1 && n <= 260)) return setError('Enter how many working days they were off (1 or more).')
+    setBusy(true)
+    setError('')
+    const { error } = await supabase!
+      .from('holidays')
+      .insert({ staff_id: who, start_date: start, end_date: end, type: 'Sick', status: 'approved', note: note.trim() || null })
+    setBusy(false)
+    if (error) return setError(friendlyError(error))
+    onClose()
+  }
+
+  return (
+    <Modal title="🤒 Add sick leave" onClose={onClose}>
+      <form onSubmit={save} className="space-y-4">
+        <Field label="Who was off sick? *">
+          <select className={inputClass} required value={who} onChange={(e) => setWho(e.target.value)}>
+            <option value="">Choose a person…</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name || p.email}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="First day off *">
+            <input type="date" required className={inputClass} value={start} onChange={(e) => setStart(e.target.value)} />
+          </Field>
+          <Field label="How many working days? *" hint="Monday to Friday; weekends are skipped.">
+            <input type="number" min={1} max={260} inputMode="numeric" required className={inputClass} value={days} onChange={(e) => setDays(e.target.value)} />
+          </Field>
+        </div>
+        {end && (
+          <p className="rounded-lg bg-slate-50 p-2 text-sm dark:bg-slate-800/50">
+            Off sick <strong>{start === end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`}</strong> ({n} working day{n === 1 ? '' : 's'})
+          </p>
+        )}
+        <Field label="Note" hint="Optional. Keep medical details out of it.">
+          <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <ErrorText>{error}</ErrorText>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={busy}>
+            {busy ? 'Saving…' : 'Save sick leave'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   )
 }
