@@ -12,6 +12,7 @@ import { Legend, MonthCalendar } from '../../components/MonthCalendar'
 import { EventForm, HolidayForm } from './forms'
 import { LeavePanel } from './LeavePanel'
 import { SalesTeam } from './SalesTeam'
+import { SickDays } from './SickDays'
 import { balanceFor, loadAllowances, type Allowance } from '../../lib/leave'
 
 const statusBadge: Record<HolidayStatus, string> = {
@@ -239,6 +240,7 @@ export function CalendarPage() {
               <MonthCalendar month={month} items={items} onMonthChange={setMonth} onItemClick={setSelected} />
               <Legend sales={canAddEvents} />
             </section>
+            {isManager && data && <SickDays holidays={data.holidays} profiles={profiles} month={month} />}
             {isFounder && profiles.length > 0 && <SalesTeam key={profiles.length} profiles={profiles} />}
             {profile && data && (
               <LeavePanel
