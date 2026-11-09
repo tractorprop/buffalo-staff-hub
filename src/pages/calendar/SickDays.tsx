@@ -3,18 +3,19 @@ import { supabase, friendlyError } from '../../lib/supabase'
 import { addDays, addMonths, monthLabel, monthStart, overlaps, workingDays } from '../../lib/dates'
 import { personName } from '../../lib/useProfiles'
 import type { Holiday, Profile } from '../../lib/types'
-import { Button, ErrorText, Field, Modal, fmtDate, inputClass, today } from '../../components/ui'
+import { Button, Confirm, ErrorText, Field, Modal, fmtDate, inputClass, today } from '../../components/ui'
 import { parse } from '../../lib/dates'
 
 // CEO and founder only: who was off sick in the month on screen, and for how many working days.
 export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; profiles: Profile[]; month: string }) {
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<Holiday | null>(null)
   const rows = useMemo(() => {
     const from = monthStart(month)
     const to = addDays(addMonths(from, 1), -1)
     const yearFrom = `${from.slice(0, 4)}-01-01`
     const sick = holidays.filter((h) => h.type === 'Sick' && h.status !== 'declined')
-    const byPerson = new Map<string, { days: number; yearDays: number; spells: { start: string; end: string; pending: boolean }[] }>()
+    const byPerson = new Map<string, { days: number; yearDays: number; spells: { start: string; end: string; pending: boolean; h: Holiday }[] }>()
     for (const h of sick) {
       // Working days this year up to the end of the month shown.
       const yStart = h.start_date < yearFrom ? yearFrom : h.start_date
@@ -25,7 +26,7 @@ export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; p
         const s = h.start_date < from ? from : h.start_date
         const e = h.end_date > to ? to : h.end_date
         p.days += workingDays(s, e)
-        p.spells.push({ start: s, end: e, pending: h.status === 'pending' })
+        p.spells.push({ start: s, end: e, pending: h.status === 'pending', h })
       }
       byPerson.set(h.staff_id, p)
     }
@@ -50,6 +51,7 @@ export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; p
         </Button>
       </div>
       {adding && <AddSickLeave profiles={profiles} onClose={() => setAdding(false)} />}
+      {editing && <AddSickLeave profiles={profiles} existing={editing} onClose={() => setEditing(null)} />}
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">Nobody was off sick this month. 👍</p>
       ) : (
@@ -71,7 +73,9 @@ export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; p
                   {r.spells.map((s, i) => (
                     <span key={i}>
                       {i > 0 && ', '}
-                      {s.start === s.end ? fmtDate(s.start) : `${fmtDate(s.start)} – ${fmtDate(s.end)}`}
+                      <button className="text-sky-700 underline decoration-dotted hover:decoration-solid dark:text-sky-300" title="Change or delete" onClick={() => setEditing(s.h)}>
+                        {s.start === s.end ? fmtDate(s.start) : `${fmtDate(s.start)} – ${fmtDate(s.end)}`}
+                      </button>
                       {s.pending && <span className="text-amber-600"> (not yet approved)</span>}
                     </span>
                   ))}
@@ -82,7 +86,9 @@ export function SickDays({ holidays, profiles, month }: { holidays: Holiday[]; p
           </tbody>
         </table>
       )}
-      <p className="mt-2 text-xs text-slate-400">Working days only (Monday to Friday). Sick leave is leave recorded with the type "Sick".</p>
+      <p className="mt-2 text-xs text-slate-400">
+        Working days only (Monday to Friday). Click the dates to change or delete an entry. Sick leave is leave recorded with the type "Sick".
+      </p>
     </section>
   )
 }
@@ -101,11 +107,12 @@ function lastWorkingDay(start: string, days: number) {
 }
 
 // CEO and founder: record that someone was off sick (saved as approved sick leave).
-function AddSickLeave({ profiles, onClose }: { profiles: Profile[]; onClose: () => void }) {
-  const [who, setWho] = useState('')
-  const [start, setStart] = useState(today())
-  const [days, setDays] = useState('1')
-  const [note, setNote] = useState('')
+function AddSickLeave({ profiles, existing, onClose }: { profiles: Profile[]; existing?: Holiday; onClose: () => void }) {
+  const [who, setWho] = useState(existing?.staff_id ?? '')
+  const [start, setStart] = useState(existing?.start_date ?? today())
+  const [days, setDays] = useState(existing ? String(Math.max(1, workingDays(existing.start_date, existing.end_date))) : '1')
+  const [note, setNote] = useState(existing?.note ?? '')
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const n = parseInt(days)
@@ -118,16 +125,15 @@ function AddSickLeave({ profiles, onClose }: { profiles: Profile[]; onClose: () 
     if (!(n >= 1 && n <= 260)) return setError('Enter how many working days they were off (1 or more).')
     setBusy(true)
     setError('')
-    const { error } = await supabase!
-      .from('holidays')
-      .insert({ staff_id: who, start_date: start, end_date: end, type: 'Sick', status: 'approved', note: note.trim() || null })
+    const row = { staff_id: who, start_date: start, end_date: end, type: 'Sick', status: 'approved', note: note.trim() || null }
+    const { error } = existing ? await supabase!.from('holidays').update(row).eq('id', existing.id) : await supabase!.from('holidays').insert(row)
     setBusy(false)
     if (error) return setError(friendlyError(error))
     onClose()
   }
 
   return (
-    <Modal title="🤒 Add sick leave" onClose={onClose}>
+    <Modal title={existing ? '🤒 Change sick leave' : '🤒 Add sick leave'} onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
         <Field label="Who was off sick? *">
           <select className={inputClass} required value={who} onChange={(e) => setWho(e.target.value)}>
@@ -157,12 +163,30 @@ function AddSickLeave({ profiles, onClose }: { profiles: Profile[]; onClose: () 
         </Field>
         <ErrorText>{error}</ErrorText>
         <div className="flex justify-end gap-2">
+          {existing && (
+            <Button variant="danger" className="mr-auto" onClick={() => setConfirmDelete(true)}>
+              🗑️ Delete
+            </Button>
+          )}
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? 'Saving…' : 'Save sick leave'}
+            {busy ? 'Saving…' : existing ? 'Save changes' : 'Save sick leave'}
           </Button>
         </div>
       </form>
+      {confirmDelete && existing && (
+        <Confirm
+          title="Delete this sick leave?"
+          message={`${profiles.find((p) => p.id === existing.staff_id)?.full_name ?? 'This person'}'s sick leave from ${fmtDate(existing.start_date)} to ${fmtDate(existing.end_date)} will be removed.`}
+          onConfirm={async () => {
+            const { error } = await supabase!.from('holidays').delete().eq('id', existing.id)
+            setConfirmDelete(false)
+            if (error) return setError(friendlyError(error))
+            onClose()
+          }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </Modal>
   )
 }
