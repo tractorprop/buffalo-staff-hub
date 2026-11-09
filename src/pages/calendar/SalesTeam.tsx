@@ -20,16 +20,17 @@ export function SalesTeam({ profiles }: { profiles: Profile[] }) {
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="font-semibold">🤝 Sales team</h2>
-      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-        Tick who's in sales. They can add events (for everyone, or sales team only) and see sales events. Everyone else counts as warehouse. CEO and founder see
-        everything.
-      </p>
+    <section className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
+      <h2
+        className="text-sm font-semibold"
+        title="Tick who's in sales. They can add events (for everyone or sales only) and see sales events. Everyone else counts as warehouse."
+      >
+        🤝 Sales team:
+      </h2>
       {people.length === 0 ? (
         <p className="text-sm text-slate-500">No staff accounts yet.</p>
       ) : (
-        <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
           {people.map((p) => (
             <label key={p.id} className="flex items-center gap-2 text-sm">
               <input type="checkbox" className="h-4 w-4 accent-orange-500" checked={!!team[p.id]} onChange={(e) => setPending({ p, inSales: e.target.checked })} />

@@ -240,8 +240,6 @@ export function CalendarPage() {
               <MonthCalendar month={month} items={items} onMonthChange={setMonth} onItemClick={setSelected} />
               <Legend sales={canAddEvents} />
             </section>
-            {isManager && data && <SickDays holidays={data.holidays} profiles={profiles} month={month} />}
-            {isFounder && profiles.length > 0 && <SalesTeam key={profiles.length} profiles={profiles} />}
             {profile && data && (
               <LeavePanel
                 me={profile.id}
@@ -253,6 +251,9 @@ export function CalendarPage() {
               />
             )}
           </div>
+
+          {isFounder && profiles.length > 0 && <SalesTeam key={profiles.length} profiles={profiles} />}
+          {isManager && data && <SickDays holidays={data.holidays} profiles={profiles} month={month} />}
 
           <section>
             <h2 className="mb-2 font-semibold">Coming up (next 60 days)</h2>
