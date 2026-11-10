@@ -92,7 +92,8 @@ export function NewInvoice({ data }: { data: SalesData }) {
   const deliveryValue = delivery.trim() === '' ? null : Math.max(0, parseFloat(delivery) || 0)
   const discountValue = Math.max(0, parseFloat(discount) || 0)
   const extras: InvoiceLine[] = [
-    ...(deliveryValue !== null ? [{ description: 'Delivery', qty: 1, unit_price_inc: deliveryValue, vat_rate: extraRate }] : []),
+    // £0 delivery means the customer is collecting, so the invoice says "Collection".
+    ...(deliveryValue !== null ? [{ description: deliveryValue === 0 ? 'Collection' : 'Delivery', qty: 1, unit_price_inc: deliveryValue, vat_rate: extraRate }] : []),
     ...(discountValue > 0 ? [{ description: 'Discount', qty: 1, unit_price_inc: -discountValue, vat_rate: extraRate }] : []),
   ]
   const totals = invoiceTotals([...lines, ...extras])
@@ -357,7 +358,9 @@ export function NewInvoice({ data }: { data: SalesData }) {
               />
             </span>
             <Button onClick={() => setDelivery('0')}>🏠 Customer is collecting (£0)</Button>
-            {deliveryValue !== null && <span className="font-semibold text-green-700 dark:text-green-400">✓ Delivery {money(deliveryValue)}</span>}
+            {deliveryValue !== null && (
+              <span className="font-semibold text-green-700 dark:text-green-400">{deliveryValue === 0 ? '✓ Collection (£0)' : `✓ Delivery ${money(deliveryValue)}`}</span>
+            )}
           </div>
         </section>
 
@@ -454,7 +457,7 @@ export function NewInvoice({ data }: { data: SalesData }) {
         <div className="space-y-1 border-t border-slate-200 pt-3 text-sm dark:border-slate-700">
           {deliveryValue !== null && (
             <div className="flex justify-between text-slate-500">
-              <span>Delivery</span>
+              <span>{deliveryValue === 0 ? 'Collection' : 'Delivery'}</span>
               <span>{money(lineTotals(extras[0]).amount)}</span>
             </div>
           )}

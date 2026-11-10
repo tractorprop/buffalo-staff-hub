@@ -256,7 +256,7 @@ export function StockEntryPage() {
     const found = new Map<string, Line>()
     const skipped: string[] = []
     for (const l of (inv as Invoice).lines) {
-      if (/^(delivery|discount)$/i.test(l.description)) continue
+      if (/^(delivery|collection|discount)$/i.test(l.description)) continue
       const match =
         l.model_id && data.models.some((m) => m.id === l.model_id)
           ? { modelId: l.model_id, size: l.size ?? '' }
